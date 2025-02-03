@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Value五子棋 v2</title>
+  <style>
+    /* 棋盘样式 */
+    #board {
+      display: grid;
+      grid-template-columns: repeat(15, 30px);
+      grid-template-rows: repeat(15, 30px);
+      gap: 0;
+      width: 450px;
+      height: 450px;
+      margin: 20px auto;
+      background-color: #ccc;
+      border: 2px solid #333;
+    }
+    .cell {
+      width: 30px;
+      height: 30px;
+      background-color: #eee;
+      border: 1px solid #999;
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .black {
+      background-color: black;
+      border-radius: 50%;
+      width: 80%;
+      height: 80%;
+    }
+    .white {
+      background-color: white;
+      border-radius: 50%;
+      width: 80%;
+      height: 80%;
+      box-shadow: 0 0 2px #000;
+    }
+    h1 {
+      text-align: center;
+    }
+    #status {
+      text-align: center;
+      margin: 10px;
+      font-weight: bold;
+    }
+    .settings {
+      text-align: center;
+      margin: 20px auto;
+      padding: 10px;
+      background: #f5f5f5;
+      border-radius: 8px;
+      max-width: 450px;
+    }
+    .settings label {
+      margin: 0 15px;
+      font-size: 14px;
+    }
+    #restart {
+      padding: 8px 20px;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Value五子棋 v2</h1>
+  <div class="settings">
+    <label>难度：
+      <select id="difficulty">
+        <option value="3">入门</option>
+        <option value="4" selected>初级</option>
+        <option value="5">中级</option>
+        <option value="6">高级</option>
+        <option value="8">？</option>
+      </select>
+    </label>
+    <label>先手：
+      <select id="firstPlayer">
+        <option value="human">玩家</option>
+        <option value="ai">AI</option>
+      </select>
+    </label>
+    <button id="restart" onclick="initGame()">重新开始</button>
+  </div>
+  <div id="status">等待玩家落子...</div>
+  <div id="board"></div>
+
+  <script>
+    /**************** 全局设置 ****************/
+    const SIZE = 15;
+    const HUMAN = 1;
+    const AI = 2;
+    let MAX_DEPTH = 4;
+    let board = [];
+    let gameOver = false;
+    // 置换表：缓存搜索过程中相同局面的评估结果
+    let transpositionTable = new Map();
+    // 记录上一轮迭代搜索的最佳着点，用于候选点排序加速
+    let globalLastBestMove = null;
+    // 用于杀手着点启发，数组下标为当前搜索层数
+    let killerMoves = [];
+    for (let i = 0; i < 50; i++) {
+      killerMoves[i] = null;
+    }
+    // 评估各种棋型的分数（数值经过调试，越高表示越有利）
+    const SCORE_CONFIG = {
+      five: 1000000,
+      live4: 500000,
+      dead4: 10000,
+      live3: 10000,
+      dead3: 100,
+      live2: 50,
+      dead2: 10,
+      center: 5
+    };
+
+    /**************** UI 相关 ****************/
+    function initBoard() {
+      board = Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
+    }
+
+    function createBoardUI() {
+      const boardDiv = document.getElementById("board");
+      boardDiv.innerHTML = "";
+      for (let r = 0; r < SIZE; r++) {
+        for (let c = 0; c < SIZE; c++) {
+          const cell = document.createElement("div");
+          cell.className = "cell";
+          cell.addEventListener("click", () => handleClick(r, c));
+          boardDiv.appendChild(cell);
+        }
+      }
+    }
+
+    function renderBoard() {
+      const cells = document.getElementById("board").children;
+      for (let r = 0; r < SIZE; r++) {
+        for (let c = 0; c < SIZE; c++) {
+          const index = r * SIZE + c;
+          cells[index].innerHTML = "";
+          if (board[r][c] === HUMAN) {
+            cells[index].appendChild(createStone("black"));
+          } else if (board[r][c] === AI) {
+            cells[index].appendChild(createStone("white"));
+          }
+        }
+      }
+    }
+
+    function createStone(className) {
+      let stone = document.createElement("div");
+      stone.className = className;
+      return stone;
+    }
+
+    function updateStatus(message) {
+      document.getElementById("status").textContent = message;
+    }
+
+    /**************** 游戏控制 ****************/
+    function handleClick(r, c) {
+      if (gameOver || board[r][c] !== 0) return;
+      updateStatus("AI思考中...");
+      makeMove(r, c, HUMAN);
+      renderBoard();
+      if (checkWinOnBoard(board, r, c, HUMAN)) {
+        gameOver = true;
+        updateStatus("恭喜，你赢了！");
+        return;
+      }
+      setTimeout(computerMove, 100);
+    }
+
+    function makeMove(r, c, player) {
+      board[r][c] = player;
+    }
+
+    function initGame() {
+      gameOver = false;
+      transpositionTable.clear();
+      globalLastBestMove = null;
+      for (let i = 0; i < killerMoves.length; i++) killerMoves[i] = null;
+      initBoard();
+      createBoardUI();
+      const firstPlayer = document.getElementById("firstPlayer").value;
+      if (firstPlayer === "ai") {
+        updateStatus("AI先手");
+        const center = Math.floor(SIZE / 2);
+        makeMove(center, center, AI);
+        renderBoard();
+        updateStatus("玩家回合");
+      } else {
+        updateStatus("玩家先手");
+      }
+    }
+
+    /**************** 局面评估相关 ****************/
+    // 综合评估整个局面（返回基于 AI 视角的分数，正值对 AI 有利）
+    function evaluate(currentBoard) {
+      let score = 0;
+      for (let r = 0; r < SIZE; r++) {
+        for (let c = 0; c < SIZE; c++) {
+          if (currentBoard[r][c] === AI) {
+            score += evaluatePosition(currentBoard, r, c, AI);
+          } else if (currentBoard[r][c] === HUMAN) {
+            score -= evaluatePosition(currentBoard, r, c, HUMAN) * 1.3;
+          }
+        }
+      }
+      return score;
+    }
+
+    // 对 (r, c) 点附近的局面进行局部评估，遍历四个方向
+    function evaluatePosition(currentBoard, r, c, player) {
+      let total = 0;
+      const directions = [[1, 0], [0, 1], [1, 1], [1, -1]];
+      for (let [dx, dy] of directions) {
+        let line = [];
+        // 构造长度为9的线段，确保 (r,c) 位于中间
+        for (let i = -4; i <= 4; i++) {
+          let x = r + dx * i;
+          let y = c + dy * i;
+          if (validPos(x, y)) {
+            line.push(currentBoard[x][y]);
+          } else {
+            line.push(-1); // 用-1表示边界
+          }
+        }
+        total += analyzeLine(line, player);
+      }
+      // 加入中心权重：越靠近中心分数越高
+      let center = Math.floor(SIZE / 2);
+      total += SCORE_CONFIG.center * (SIZE - (Math.abs(r - center) + Math.abs(c - center)));
+      return total;
+    }
+
+    // 分析一条线段，根据不同棋型累加分数
+    function analyzeLine(line, player) {
+      let score = 0;
+      // 检测子段长度从2到5
+      for (let len = 2; len <= 5; len++) {
+        for (let i = 0; i <= line.length - len; i++) {
+          const segment = line.slice(i, i + len);
+          const pattern = detectPattern(segment, player);
+          score += SCORE_CONFIG[pattern] || 0;
+        }
+      }
+      return score;
+    }
+
+    // 根据一段棋子序列判断棋型（区分活/眠型）
+    function detectPattern(segment, player) {
+      let count = 0, blanks = 0;
+      for (let i = 0; i < segment.length; i++) {
+        if (segment[i] === player) count++;
+        else if (segment[i] === 0) blanks++;
+      }
+      // 判断两端是否挡住（边界或对方棋子）
+      let headBlock = (segment[0] !== 0 && segment[0] !== player);
+      let tailBlock = (segment[segment.length - 1] !== 0 && segment[segment.length - 1] !== player);
+      if (count >= 5) return "five";
+      if (count === 4 && blanks === 1) return (!headBlock && !tailBlock) ? "live4" : "dead4";
+      if (count === 3 && blanks === 2) return (!headBlock && !tailBlock) ? "live3" : "dead3";
+      if (count === 2 && blanks === 3) return (!headBlock && !tailBlock) ? "live2" : "dead2";
+      return "none";
+    }
+
+    /**************** 局面判断及辅助函数 ****************/
+    function validPos(r, c) {
+      return r >= 0 && r < SIZE && c >= 0 && c < SIZE;
+    }
+
+    function hasNeighbor(currentBoard, r, c, distance) {
+      for (let i = -distance; i <= distance; i++) {
+        for (let j = -distance; j <= distance; j++) {
+          let x = r + i, y = c + j;
+          if (validPos(x, y) && currentBoard[x][y] !== 0) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    function cloneBoard(currentBoard) {
+      return currentBoard.map(row => row.slice());
+    }
+
+    // 检查 (r,c) 落子后是否达成连珠
+    function checkWinOnBoard(currentBoard, r, c, player) {
+      const directions = [[1, 0], [0, 1], [1, 1], [1, -1]];
+      for (let [dx, dy] of directions) {
+        let count = 1;
+        let x = r + dx, y = c + dy;
+        while (validPos(x, y) && currentBoard[x][y] === player) {
+          count++;
+          x += dx; y += dy;
+        }
+        x = r - dx, y = c - dy;
+        while (validPos(x, y) && currentBoard[x][y] === player) {
+          count++;
+          x -= dx; y -= dy;
+        }
+        if (count >= 5) return true;
+      }
+      return false;
+    }
+
+    // 判断是否终局：有玩家胜利或棋盘已满，返回 {win, player, draw}
+    function checkTerminalState(currentBoard) {
+      for (let r = 0; r < SIZE; r++) {
+        for (let c = 0; c < SIZE; c++) {
+          if (currentBoard[r][c] !== 0 && checkWinOnBoard(currentBoard, r, c, currentBoard[r][c])) {
+            return { win: true, player: currentBoard[r][c] };
+          }
+        }
+      }
+      if (currentBoard.flat().every(cell => cell !== 0)) return { draw: true };
+      return { win: false, draw: false };
+    }
+
+    // 将局面转换为字符串，用于置换表键值
+    function boardToString(currentBoard) {
+      return currentBoard.map(row => row.join("")).join("");
+    }
+
+    /**************** AI 搜索算法：Negamax + α‑β 剪枝 + 置换表 + 迭代加深 + 杀手启发 ****************/
+    // 候选着点生成函数，ply 为当前搜索层（用以引用 killerMoves）
+    function getCandidateMoves(currentBoard, ply) {
+      let moves = [];
+      const center = Math.floor(SIZE / 2);
+      for (let r = 0; r < SIZE; r++) {
+        for (let c = 0; c < SIZE; c++) {
+          if (currentBoard[r][c] !== 0) continue;
+          // 只考虑周围有棋子的空位（距离设为 2 或 3）
+          if (!hasNeighbor(currentBoard, r, c, 2)) continue;
+          let attack = evaluatePosition(currentBoard, r, c, AI);
+          let defense = evaluatePosition(currentBoard, r, c, HUMAN);
+          let positional = SCORE_CONFIG.center - (Math.abs(r - center) + Math.abs(c - center));
+          let score = attack + defense + positional;
+          // 如果该着法与上轮最佳着法或杀手着点相同，则给予加权
+          if (globalLastBestMove && globalLastBestMove.r === r && globalLastBestMove.c === c) {
+            score += 100000;
+          }
+          if (killerMoves[ply] && killerMoves[ply].r === r && killerMoves[ply].c === c) {
+            score += 100000;
+          }
+          moves.push({ r, c, score });
+        }
+      }
+      moves.sort((a, b) => b.score - a.score);
+      // 限制候选着点数量，减小搜索空间（可根据难度调节）
+      return moves.slice(0, 50);
+    }
+
+    // Negamax 搜索算法（color==1 表示 AI 视角，-1 则为对手视角），同时传入 ply 层数用于杀手启发
+    function negamax(currentBoard, depth, alpha, beta, color, ply) {
+      let boardKey = boardToString(currentBoard) + "_" + depth + "_" + color;
+      if (transpositionTable.has(boardKey)) {
+        return transpositionTable.get(boardKey);
+      }
+
+      let terminal = checkTerminalState(currentBoard);
+      if (terminal.win) {
+        return [null, (terminal.player === AI ? Infinity : -Infinity)];
+      }
+      if (depth === 0) {
+        return [null, color * evaluate(currentBoard)];
+      }
+
+      let candidateMoves = getCandidateMoves(currentBoard, ply);
+      if (candidateMoves.length === 0) return [null, color * evaluate(currentBoard)];
+
+      let bestMove = candidateMoves[0];
+      let bestValue = -Infinity;
+      for (let move of candidateMoves) {
+        let newBoard = cloneBoard(currentBoard);
+        newBoard[move.r][move.c] = (color === 1 ? AI : HUMAN);
+        // 如果直接形成胜局，提前返回
+        if (checkWinOnBoard(newBoard, move.r, move.c, (color === 1 ? AI : HUMAN))) {
+          transpositionTable.set(boardKey, [move, Infinity]);
+          return [move, Infinity];
+        }
+        let [childMove, score] = negamax(newBoard, depth - 1, -beta, -alpha, -color, ply + 1);
+        let value = -score;
+        if (value > bestValue) {
+          bestValue = value;
+          bestMove = move;
+        }
+        alpha = Math.max(alpha, value);
+        if (alpha >= beta) {
+          killerMoves[ply] = move;
+          break;
+        }
+      }
+      let result = [bestMove, bestValue];
+      transpositionTable.set(boardKey, result);
+      return result;
+    }
+
+    // AI 落子：采用迭代加深，在规定时间内逐层加深搜索
+    function computerMove() {
+      if (gameOver) return;
+      MAX_DEPTH = parseInt(document.getElementById("difficulty").value);
+      transpositionTable.clear(); // 每次搜索前清空置换表
+      const startTime = Date.now();
+      let bestMove = null;
+      let bestScore = null;
+      for (let depth = 1; depth <= MAX_DEPTH; depth++) {
+        let [move, score] = negamax(cloneBoard(board), depth, -Infinity, Infinity, 1, 0);
+        if (move) {
+          bestMove = move;
+          bestScore = score;
+          globalLastBestMove = move;
+        }
+        // 超时控制：若搜索耗时超过1秒则提前退出
+        if (Date.now() - startTime > 1000) break;
+      }
+      if (bestMove) {
+        makeMove(bestMove.r, bestMove.c, AI);
+        renderBoard();
+        if (checkWinOnBoard(board, bestMove.r, bestMove.c, AI)) {
+          gameOver = true;
+          updateStatus("AI获胜！");
+        } else {
+          updateStatus("玩家回合");
+        }
+      } else {
+        updateStatus("平局！");
+        gameOver = true;
+      }
+      console.log(`AI决策耗时: ${Date.now() - startTime}ms, 搜索深度: ${MAX_DEPTH}, bestScore: ${bestScore}`);
+    }
+
+    /**************** 页面初始化 ****************/
+    window.onload = function () {
+      initGame();
+    };
+  </script>
+</body>
+</html>
