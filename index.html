@@ -2,24 +2,30 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>sehsapneb</title>
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>sehsapneb - 改进版UI</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="在这里分享一些有趣的页面">
-  
+  <link rel="icon" type="image/png" href="favicon.png">
   <style>
+    /* ====================================
+       CSS变量与基础设置
+    ======================================*/
     :root {
-      --primary-color: #4f46e5;    /* 更优雅的主题色 */
-      --primary-hover: #4338ca;
-      --dark-bg: #1e1b4b;          /* 更深邃的背景色 */
-      --light-bg: #f8fafc;
+      --primary-color: #007aff;
+      --primary-hover: #005ecb;
+      --bg-color: #f5f5f5;
+      --header-bg: #ffffff;
       --card-bg: #ffffff;
-      --text-dark: #1e293b;
-      --text-light: #ffffff;
-      --shadow-sm: 0 2px 8px rgba(0,0,0,0.06);
-      --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
-      --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+      --text-color: #333333;
+      --shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+      --shadow-hover: 0 4px 8px rgba(0, 0, 0, 0.2);
+      --border-radius: 8px;
+      --transition: all 0.3s ease;
+      --gap: 20px;
     }
 
+    /* 全局重置 */
     * {
       margin: 0;
       padding: 0;
@@ -27,155 +33,163 @@
     }
 
     html {
-      scroll-behavior: smooth;
       font-size: 16px;
+      scroll-behavior: smooth;
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', 'Microsoft YaHei', sans-serif;
-      background: var(--light-bg);
-      color: var(--text-dark);
-      line-height: 1.7;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Microsoft YaHei", sans-serif;
+      background: var(--bg-color);
+      color: var(--text-color);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
     }
 
     .container {
-      width: min(92%, 1280px);
+      width: min(90%, 1200px);
       margin: 0 auto;
-      padding: 0 1rem;
+      padding: var(--gap);
     }
 
-    /* 头部样式优化 */
+    /* ====================================
+       无障碍：跳过导航链接
+    ======================================*/
+    .skip-link {
+      position: absolute;
+      top: -40px;
+      left: 0;
+      background: var(--primary-color);
+      color: #fff;
+      padding: 8px;
+      z-index: 100;
+      transition: top 0.3s ease;
+    }
+    
+    .skip-link:focus {
+      top: 0;
+    }
+
+    /* ====================================
+       头部样式
+    ======================================*/
     .site-header {
-      background: linear-gradient(135deg, var(--dark-bg), #2d2a77);
-      color: var(--text-light);
-      padding: 3rem 0 2.5rem;
-      box-shadow: var(--shadow-md);
+      background: var(--header-bg);
+      padding: 20px 0;
+      text-align: center;
+      box-shadow: var(--shadow);
     }
 
     .site-title {
-      font-size: 2.5rem;
-      font-weight: 800;
-      margin-bottom: 1rem;
-      letter-spacing: -0.03em;
-      background: linear-gradient(to right, #fff, #e2e8f0);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
+      font-size: 2rem;
+      font-weight: bold;
+      margin-bottom: 10px;
+      color: var(--primary-color);
+      transition: color var(--transition);
     }
 
+    .site-title:hover,
+    .site-title:focus {
+      color: var(--primary-hover);
+      outline: none;
+    }
+    
     .site-subtitle {
-      font-size: 1.1rem;
-      opacity: 0.92;
-      max-width: 780px;
-      line-height: 1.6;
+      font-size: 1rem;
+      color: var(--text-color);
     }
 
-    /* 卡片布局改进 */
+    /* ====================================
+       卡片网格布局
+    ======================================*/
     .cards-row {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 2rem;
-      margin: 3rem 0;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: var(--gap);
+      margin: 40px 0;
     }
 
     .card {
       background: var(--card-bg);
-      border-radius: 12px;
-      padding: 2rem;
-      box-shadow: var(--shadow-sm);
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      border: 1px solid rgba(0,0,0,0.05);
+      border-radius: var(--border-radius);
+      padding: var(--gap);
+      box-shadow: var(--shadow);
+      border: 1px solid rgba(0, 0, 0, 0.05);
+      transition: var(--transition);
     }
 
     .card:hover {
-      transform: translateY(-6px);
-      box-shadow: var(--shadow-lg);
-      border-color: rgba(79, 70, 229, 0.1);
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-hover);
+      border-color: rgba(0,0,0,0.1);
     }
 
     .card h2 {
-      font-size: 1.4rem;
-      margin-bottom: 1rem;
-      color: var(--dark-bg);
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    .card h2::before {
-      content: " ";
-      font-size: 1.2rem;
+      font-size: 1.25rem;
+      margin-bottom: 10px;
+      color: var(--primary-color);
     }
 
     .card p {
-      margin-bottom: 1.5rem;
       font-size: 1rem;
-      color: #64748b;
-      line-height: 1.6;
+      color: var(--text-color);
+      margin-bottom: 20px;
     }
 
-    /* 按钮样式增强 */
+    /* ====================================
+       按钮样式
+    ======================================*/
     .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
+      display: inline-block;
       background: var(--primary-color);
-      color: white;
-      padding: 0.875rem 1.5rem;
-      border-radius: 8px;
-      font-weight: 600;
-      font-size: 1rem;
-      transition: all 0.25s ease;
+      color: #fff;
+      padding: 10px 15px;
+      border-radius: var(--border-radius);
+      text-decoration: none;
+      transition: var(--transition);
+      text-align: center;
       width: 100%;
       border: none;
       cursor: pointer;
-      text-decoration: none;
     }
 
-    .btn:hover {
+    .btn:hover,
+    .btn:focus {
       background: var(--primary-hover);
       transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(0,122,255,0.3);
     }
 
-    .btn:active {
-      transform: translateY(0);
-    }
-
-    /* 页脚优化 */
+    /* ====================================
+       页脚样式
+    ======================================*/
     .site-footer {
-      background: var(--dark-bg);
-      color: var(--text-light);
-      padding: 3rem 0;
-      margin-top: 4rem;
+      background: var(--header-bg);
+      color: var(--text-color);
+      text-align: center;
+      padding: 20px 0;
+      margin-top: 40px;
+      box-shadow: var(--shadow);
     }
 
     .site-footer p {
-      opacity: 0.9;
-      font-size: 0.95rem;
-      line-height: 1.8;
+      font-size: 0.9rem;
+      margin-bottom: 5px;
     }
 
-    /* 响应式优化 */
+    /* ====================================
+       响应式适配与动画优化
+    ======================================*/
     @media (max-width: 768px) {
       html {
-        font-size: 15px;
+        font-size: 14px;
       }
-
       .site-title {
-        font-size: 2rem;
+        font-size: 1.5rem;
       }
-
-      .site-subtitle {
-        font-size: 1rem;
-      }
-
       .cards-row {
         grid-template-columns: 1fr;
-        gap: 1.5rem;
-      }
-
-      .card {
-        padding: 1.5rem;
+        gap: 15px;
       }
     }
 
@@ -186,74 +200,55 @@
     }
   </style>
 </head>
-
 <body>
+  <a href="#main-content" class="skip-link">跳过导航</a>
   <header class="site-header" role="banner">
     <div class="container">
       <h1 class="site-title">一个大多数由AI创建的分享网站🫠</h1>
-      <p class="site-subtitle">
-        在这里将会分享一些有趣的东西
-      </p>
+      <p class="site-subtitle">在这里将会分享一些有趣的东西</p>
     </div>
   </header>
 
-  <main class="main-content" role="main">
-    <div class="container">
-      <section class="cards-row" aria-label="？">
-      
-        <article class="card" role="article">
-          <h2>Deepseek R1</h2>
-          <p>使用手机号登录，DeepSeek-R1是国内的低成本、高性能思考模型，可以联网。</p>
-          <a href="https://www.deepseek.com/" class="btn" target="_blank" rel="noopener">
-            立即访问
-          </a>
-        </article>
-        
-        <article class="card" role="article">
-          <h2>ValueAIV2五子棋AI</h2>
-          <p>由o3-mini-high完成的五子棋AI，2次优化。</p>
-          <a href="https://shangbai6.github.io/mmexp" class="btn" target="_blank" rel="noopener">
-            立即访问
-          </a>
-        </article>
-        
-        <article class="card" role="article">
-          <h2>R1的五子棋AI</h2>
-          <p>由R1完成的五子棋AI，数十次优化。</p>
-          <a href="https://shangbai6.github.io/mm3" class="btn" target="_blank" rel="noopener">
-            立即访问
-          </a>
-        </article>
-        
-        <!-- 其他卡片结构类似 -->
-      </section>
+  <main id="main-content" class="container" role="main">
+    <section class="cards-row" aria-label="导航链接">
+      <article class="card" role="article">
+        <h2>Deepseek R1</h2>
+        <p>使用手机号登录，DeepSeek-R1是国内的低成本、高性能思考模型，可以联网。</p>
+        <a href="https://www.deepseek.com/" class="btn" target="_blank" rel="noopener noreferrer">
+          立即访问
+        </a>
+      </article>
 
-      <!-- 其他卡片组 -->
-    </div>
+      <article class="card" role="article">
+        <h2>ValueAIV2五子棋AI</h2>
+        <p>由o3-mini-high完成的五子棋AI，经过2次优化。</p>
+        <a href="https://shangbai6.github.io/mmexp" class="btn" target="_blank" rel="noopener noreferrer">
+          立即访问
+        </a>
+      </article>
+
+      <article class="card" role="article">
+        <h2>R1的五子棋AI</h2>
+        <p>由R1开发的五子棋AI，经过数十次优化。</p>
+        <a href="https://shangbai6.github.io/mm3" class="btn" target="_blank" rel="noopener noreferrer">
+          立即访问
+        </a>
+      </article>
+      <!-- 更多卡片可按此结构添加 -->
+    </section>
   </main>
 
   <footer class="site-footer" role="contentinfo">
     <div class="container">
-      <p role="contentinfo">本导航站仅提供聚合跳转，不收集用户任何信息。</p>
-      <p>sehsapneb  ; <span id="year"></span>    </p>
+      <p>本导航站仅提供聚合跳转，不收集用户任何信息。</p>
+      <p>sehsapneb  ; <span id="year"></span></p>
     </div>
   </footer>
 
   <script>
-    // 自动年份 + 性能优化
+    // 自动更新年份
     document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('year').textContent = new Date().getFullYear();
-      
-      // 延迟加载非关键资源（示例）
-      const lazyLoad = () => {
-        if ('loading' in HTMLImageElement.prototype) {
-          const images = document.querySelectorAll('img[loading="lazy"]');
-          images.forEach(img => {
-            img.src = img.dataset.src;
-          });
-        }
-      };
-      window.addEventListener('load', lazyLoad);
     });
   </script>
 </body>
