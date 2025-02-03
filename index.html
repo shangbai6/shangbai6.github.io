@@ -1,408 +1,260 @@
-<!DOCTYPE html> 
-<html> 
-<head> 
-  <meta charset="utf-8"> 
-  <title>ValueAIV2</title> 
-  <style> 
-    body { font-family: sans-serif; text-align: center; } 
-    #boardCanvas { background-color: #f0d9b5; margin-top: 10px; cursor: pointer; } 
-    #controls { margin-bottom: 10px; } 
-  </style> 
-</head> 
-<body> 
-  <h1>ValueAIV2</h1> 
-  <div id="controls"> 
-    难度（最大搜索深度）：<input type="range" id="difficulty" min="1" max="5" value="3"> 
-    <span id="difficultyValue">3</span> 
-    <br> 
-    先手： 
-    <label><input type="radio" name="first" id="firstHuman" value="human" checked> 人类</label> 
-    <label><input type="radio" name="first" id="firstAI" value="ai"> AI</label> 
-    <br> 
-    <button id="restartBtn">重新开始</button> 
-  </div> 
-  <canvas id="boardCanvas" width="600" height="600"></canvas> 
- 
-  <script> 
-    // ---------------------- 常量与全局变量 ---------------------- 
-    const BOARD_SIZE = 15;      // 棋盘尺寸 15x15 
-    const CELL_SIZE = 40;       // 单元格像素大小 
-    const EMPTY = 0;            // 空 
-    const BLACK = 1;            // 黑棋 
-    const WHITE = 2;            // 白棋 
- 
-    var humanColor, aiColor; 
-    var currentPlayer; 
-    var gameOver = false; 
-    var maxDepth = 4;           // 最大搜索深度（slider 值 + 1） 
- 
-    var board = [];           // 棋盘状态数组 
-    var transpositionTable = {};  // 置换表缓存 
- 
-    const canvas = document.getElementById("boardCanvas"); 
-    const ctx = canvas.getContext("2d"); 
- 
-    // ---------------------- 初始化棋盘及界面 ---------------------- 
-    function initBoard() { 
-      board = []; 
-      for (let i = 0; i < BOARD_SIZE; i++) { 
-        board[i] = []; 
-        for (let j = 0; j < BOARD_SIZE; j++) { 
-          board[i][j] = EMPTY; 
-        } 
-      } 
-      gameOver = false; 
-      transpositionTable = {}; 
- 
-      // 根据滑块设定搜索深度（深度 = slider值 + 1） 
-      let diff = document.getElementById("difficulty").value; 
-      maxDepth = parseInt(diff) + 1; 
- 
-      // 根据先手选择决定双方棋色（约定：黑棋先走） 
-      if (document.getElementById("firstHuman").checked) { 
-        humanColor = BLACK; 
-        aiColor = WHITE; 
-        currentPlayer = humanColor; 
-      } else { 
-        humanColor = WHITE; 
-        aiColor = BLACK; 
-        currentPlayer = aiColor; 
-      } 
-      drawBoard(); 
- 
-      // 若 AI 先手，立即调用 AI 落子 
-      if (currentPlayer === aiColor) { 
-        setTimeout(aiMove, 100); 
-      } 
-    } 
- 
-    document.getElementById("difficulty").addEventListener("input", function() { 
-      document.getElementById("difficultyValue").innerText = this.value; 
-    }); 
-    document.getElementById("restartBtn").addEventListener("click", initBoard); 
-    canvas.addEventListener("click", handleClick); 
- 
-    // ---------------------- 绘制棋盘与棋子 ---------------------- 
-    function drawBoard() { 
-      ctx.clearRect(0, 0, canvas.width, canvas.height); 
-      ctx.strokeStyle = "#333"; 
-      ctx.lineWidth = 1; 
-      // 绘制横线 
-      for (let i = 0; i < BOARD_SIZE; i++) { 
-        ctx.beginPath(); 
-        ctx.moveTo(CELL_SIZE / 2, CELL_SIZE / 2 + i * CELL_SIZE); 
-        ctx.lineTo(canvas.width - CELL_SIZE / 2, CELL_SIZE / 2 + i * CELL_SIZE); 
-        ctx.stroke(); 
-      } 
-      // 绘制竖线 
-      for (let j = 0; j < BOARD_SIZE; j++) { 
-        ctx.beginPath(); 
-        ctx.moveTo(CELL_SIZE / 2 + j * CELL_SIZE, CELL_SIZE / 2); 
-        ctx.lineTo(CELL_SIZE / 2 + j * CELL_SIZE, canvas.height - CELL_SIZE / 2); 
-        ctx.stroke(); 
-      } 
-      // 绘制棋子 
-      for (let i = 0; i < BOARD_SIZE; i++) { 
-        for (let j = 0; j < BOARD_SIZE; j++) { 
-          if (board[i][j] !== EMPTY) { 
-            let cx = CELL_SIZE / 2 + j * CELL_SIZE; 
-            let cy = CELL_SIZE / 2 + i * CELL_SIZE; 
-            ctx.beginPath(); 
-            ctx.arc(cx, cy, CELL_SIZE * 0.4, 0, 2 * Math.PI); 
-            ctx.fillStyle = board[i][j] === BLACK ? "black" : "white"; 
-            ctx.fill(); 
-            ctx.stroke(); 
-          } 
-        } 
-      } 
-    } 
- 
-    // ---------------------- 人类落子处理 ---------------------- 
-    function handleClick(event) { 
-      if (gameOver || currentPlayer !== humanColor) return; 
-      let rect = canvas.getBoundingClientRect(); 
-      let x = event.clientX - rect.left; 
-      let y = event.clientY - rect.top; 
-      let j = Math.floor(x / CELL_SIZE); 
-      let i = Math.floor(y / CELL_SIZE); 
-      if (i < 0 || i >= BOARD_SIZE || j < 0 || j >= BOARD_SIZE) return; 
-      if (board[i][j] !== EMPTY) return; 
- 
-      board[i][j] = humanColor; 
-      drawBoard(); 
-      if (isWinningMove(i, j, humanColor)) { 
-        gameOver = true; 
-        setTimeout(() => alert("你赢了！"), 10); 
-        return; 
-      } 
-      currentPlayer = aiColor; 
-      setTimeout(aiMove, 100); 
-    } 
- 
-    // ---------------------- 判断胜利（检测四个方向） ---------------------- 
-    function isWinningMove(x, y, player) { 
-      const directions = [ 
-        [1, 0], [0, 1], 
-        [1, 1], [1, -1] 
-      ]; 
-      for (let d = 0; d < directions.length; d++) { 
-        let dx = directions[d][0], dy = directions[d][1]; 
-        let count = 1; 
-        // 正向计数 
-        let i = 1; 
-        while (true) { 
-          let nx = x + i * dx, ny = y + i * dy; 
-          if (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE && 
-              board[nx][ny] === player) { 
-            count++; 
-            i++; 
-          } else break; 
-        } 
-        // 反向计数 
-        i = 1; 
-        while (true) { 
-          let nx = x - i * dx, ny = y - i * dy; 
-          if (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE && 
-              board[nx][ny] === player) { 
-            count++; 
-            i++; 
-          } else break; 
-        } 
-        if (count >= 5) return true; 
-      } 
-      return false; 
-    } 
- 
-    // ---------------------- AI 落子 ---------------------- 
-    function aiMove() { 
-      if (gameOver) return; 
-      let candidateMoves = getCandidateMoves(); 
- 
-      // 检查 AI 是否有直接获胜的走法 
-      for (let move of candidateMoves) { 
-        board[move.x][move.y] = aiColor; 
-        if (isWinningMove(move.x, move.y, aiColor)) { 
-          board[move.x][move.y] = EMPTY; 
-          board[move.x][move.y] = aiColor; 
-          drawBoard(); 
-          gameOver = true; 
-          setTimeout(() => alert("AI 赢了！"), 10); 
-          return; 
-        } 
-        board[move.x][move.y] = EMPTY; 
-      } 
- 
-      // 检查对手是否有必胜走法，优先堵截 
-      for (let move of candidateMoves) { 
-        board[move.x][move.y] = humanColor; 
-        if (isWinningMove(move.x, move.y, humanColor)) { 
-          board[move.x][move.y] = EMPTY; 
-          board[move.x][move.y] = aiColor; // 阻挡对手必胜 
-          drawBoard(); 
-          currentPlayer = humanColor; 
-          return; 
-        } 
-        board[move.x][move.y] = EMPTY; 
-      } 
- 
-      // 否则采用迭代加深搜索获得最佳走法 
-      let bestMove = iterativeDeepening(maxDepth); 
-      if (bestMove) { 
-        board[bestMove.x][bestMove.y] = aiColor; 
-        drawBoard(); 
-        if (isWinningMove(bestMove.x, bestMove.y, aiColor)) { 
-          gameOver = true; 
-          setTimeout(() => alert("AI 赢了！"), 10); 
-          return; 
-        } 
-      } 
-      currentPlayer = humanColor; 
-    } 
- 
-    // ---------------------- 候选落子点生成 ---------------------- 
-    // 仅在所有落子点的外包区域内（外延 margin 个单位）生成候选点 
-    function getCandidateMoves() { 
-      let moves = []; 
-      let minX = BOARD_SIZE, minY = BOARD_SIZE, maxX = 0, maxY = 0; 
-      let found = false; 
-      for (let i = 0; i < BOARD_SIZE; i++) { 
-        for (let j = 0; j < BOARD_SIZE; j++) { 
-          if (board[i][j] !== EMPTY) { 
-            found = true; 
-            if (i < minX) minX = i; 
-            if (i > maxX) maxX = i; 
-            if (j < minY) minY = j; 
-            if (j > maxY) maxY = j; 
-          } 
-        } 
-      } 
-      if (!found) { 
-        moves.push({ x: Math.floor(BOARD_SIZE / 2), y: Math.floor(BOARD_SIZE / 2) }); 
-        return moves; 
-      } 
-      let margin = 2; 
-      minX = Math.max(minX - margin, 0); 
-      minY = Math.max(minY - margin, 0); 
-      maxX = Math.min(maxX + margin, BOARD_SIZE - 1); 
-      maxY = Math.min(maxY + margin, BOARD_SIZE - 1); 
-      for (let i = minX; i <= maxX; i++) { 
-        for (let j = minY; j <= maxY; j++) { 
-          if (board[i][j] === EMPTY) { 
-            moves.push({ x: i, y: j }); 
-          } 
-        } 
-      } 
-      return moves; 
-    } 
- 
-    // 辅助函数：根据候选点周围相邻棋子数计算邻近得分（用于排序） 
-    function getAdjacencyScore(move) { 
-      let score = 0; 
-      for (let dx = -1; dx <= 1; dx++) { 
-        for (let dy = -1; dy <= 1; dy++) { 
-          let nx = move.x + dx, ny = move.y + dy; 
-          if (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE && 
-              board[nx][ny] !== EMPTY) { 
-            score++; 
-          } 
-        } 
-      } 
-      return score; 
-    } 
- 
-    // ---------------------- 迭代加深与 Negamax 搜索 ---------------------- 
-    function iterativeDeepening(maxDepth) { 
-      let bestMove = null; 
-      for (let depth = 1; depth <= maxDepth; depth++) { 
-        transpositionTable = {}; // 可选择跨迭代保留缓存，本例中每层重新清空 
-        let result = negamax(depth, -Infinity, Infinity, aiColor); 
-        if (result.move) { 
-          bestMove = result.move; 
-        } 
-      } 
-      return bestMove; 
-    } 
- 
-    // Negamax 搜索（返回 { score, move }） 
-    function negamax(depth, alpha, beta, player) { 
-      let boardKey = getBoardKey(); 
-      if (transpositionTable[boardKey] && transpositionTable[boardKey].depth >= depth) { 
-        return transpositionTable[boardKey].result; 
-      } 
- 
-      if (depth === 0) { 
-        let evalScore = (player === aiColor) ? staticEvaluation() : -staticEvaluation(); 
-        return { score: evalScore, move: null }; 
-      } 
- 
-      let best = { score: -Infinity, move: null }; 
-      let moves = getCandidateMoves(); 
-      if (moves.length === 0) { 
-        let evalScore = (player === aiColor) ? staticEvaluation() : -staticEvaluation(); 
-        return { score: evalScore, move: null }; 
-      } 
- 
-      // 使用邻近得分对候选走法排序 
-      moves.sort((a, b) => getAdjacencyScore(b) - getAdjacencyScore(a)); 
- 
-      for (let move of moves) { 
-        board[move.x][move.y] = player; 
-        if (isWinningMove(move.x, move.y, player)) { 
-          board[move.x][move.y] = EMPTY; 
-          let winningScore = 1000000 + depth; // 越早获胜分数越高 
-          let res = { score: winningScore, move: move }; 
-          transpositionTable[boardKey] = { depth: depth, result: res }; 
-          return res; 
-        } 
-        let nextPlayer = (player === aiColor) ? humanColor : aiColor; 
-        let result = negamax(depth - 1, -beta, -alpha, nextPlayer); 
-        let score = -result.score; 
-        board[move.x][move.y] = EMPTY; 
-        if (score > best.score) { 
-          best.score = score; 
-          best.move = move; 
-        } 
-        alpha = Math.max(alpha, score); 
-        if (alpha >= beta) break; 
-      } 
-      transpositionTable[boardKey] = { depth: depth, result: best }; 
-      return best; 
-    } 
- 
-    function getBoardKey() { 
-      let key = ""; 
-      for (let i = 0; i < BOARD_SIZE; i++) { 
-        key += board[i].join(""); 
-      } 
-      return key; 
-    } 
- 
-    // ---------------------- 评估函数 ---------------------- 
-    // 通过计算双方棋型得分（采用较高防御系数）返回局面静态评价 
-    function staticEvaluation() { 
-      let defenseFactor = 0.82;  // 对对手威胁赋予更高权重 
-      let aiScore = evaluateFor(aiColor); 
-      let oppScore = evaluateFor(humanColor); 
-      return aiScore - defenseFactor * oppScore; 
-    } 
- 
-    // 计算指定 color 棋子的局部得分（仅统计每个方向上的连续棋子及开放端） 
-    function evaluateFor(color) { 
-      let score = 0; 
-      for (let i = 0; i < BOARD_SIZE; i++) { 
-        for (let j = 0; j < BOARD_SIZE; j++) { 
-          if (board[i][j] === color) { 
-            for (let d = 0; d < 4; d++) { 
-              let dx = [1, 0, 1, 1][d]; 
-              let dy = [0, 1, 1, -1][d]; 
-              let prevX = i - dx, prevY = j - dy; 
-              if (prevX >= 0 && prevX < BOARD_SIZE && 
-                  prevY >= 0 && prevY < BOARD_SIZE && 
-                  board[prevX][prevY] === color) 
-                continue; 
-              let count = 0; 
-              let openEnds = 0; 
-              let x = i, y = j; 
-              while (x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE && board[x][y] === color) { 
-                count++; 
-                x += dx; 
-                y += dy; 
-              } 
-              if (x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE && board[x][y] === EMPTY) 
-                openEnds++; 
-              x = i - dx; 
-              y = j - dy; 
-              if (x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE && board[x][y] === EMPTY) 
-                openEnds++; 
-              score += scoreLine(count, openEnds); 
-            } 
-          } 
-        } 
-      } 
-      return score; 
-    } 
- 
-    // 根据连续子数及开放端数量给予分值 
-    function scoreLine(count, openEnds) { 
-      if (count >= 5) return 100000; 
-      if (count === 4) { 
-        if (openEnds === 2) return 10000; 
-        else if (openEnds === 1) return 1000; 
-      } 
-      if (count === 3) { 
-        if (openEnds === 2) return 1000; 
-        else if (openEnds === 1) return 100; 
-      } 
-      if (count === 2) { 
-        if (openEnds === 2) return 100; 
-        else if (openEnds === 1) return 10; 
-      } 
-      if (count === 1) return 1; 
-      return 0; 
-    } 
- 
-    // ---------------------- 启动 ---------------------- 
-    initBoard(); 
-  </script> 
-</body> 
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>sehsapneb</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="在这里分享一些有趣的页面">
+  
+  <style>
+    :root {
+      --primary-color: #4f46e5;    /* 更优雅的主题色 */
+      --primary-hover: #4338ca;
+      --dark-bg: #1e1b4b;          /* 更深邃的背景色 */
+      --light-bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text-dark: #1e293b;
+      --text-light: #ffffff;
+      --shadow-sm: 0 2px 8px rgba(0,0,0,0.06);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+      --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      font-size: 16px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', 'Microsoft YaHei', sans-serif;
+      background: var(--light-bg);
+      color: var(--text-dark);
+      line-height: 1.7;
+    }
+
+    .container {
+      width: min(92%, 1280px);
+      margin: 0 auto;
+      padding: 0 1rem;
+    }
+
+    /* 头部样式优化 */
+    .site-header {
+      background: linear-gradient(135deg, var(--dark-bg), #2d2a77);
+      color: var(--text-light);
+      padding: 3rem 0 2.5rem;
+      box-shadow: var(--shadow-md);
+    }
+
+    .site-title {
+      font-size: 2.5rem;
+      font-weight: 800;
+      margin-bottom: 1rem;
+      letter-spacing: -0.03em;
+      background: linear-gradient(to right, #fff, #e2e8f0);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .site-subtitle {
+      font-size: 1.1rem;
+      opacity: 0.92;
+      max-width: 780px;
+      line-height: 1.6;
+    }
+
+    /* 卡片布局改进 */
+    .cards-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 2rem;
+      margin: 3rem 0;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 12px;
+      padding: 2rem;
+      box-shadow: var(--shadow-sm);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      border: 1px solid rgba(0,0,0,0.05);
+    }
+
+    .card:hover {
+      transform: translateY(-6px);
+      box-shadow: var(--shadow-lg);
+      border-color: rgba(79, 70, 229, 0.1);
+    }
+
+    .card h2 {
+      font-size: 1.4rem;
+      margin-bottom: 1rem;
+      color: var(--dark-bg);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .card h2::before {
+      content: " ";
+      font-size: 1.2rem;
+    }
+
+    .card p {
+      margin-bottom: 1.5rem;
+      font-size: 1rem;
+      color: #64748b;
+      line-height: 1.6;
+    }
+
+    /* 按钮样式增强 */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--primary-color);
+      color: white;
+      padding: 0.875rem 1.5rem;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 1rem;
+      transition: all 0.25s ease;
+      width: 100%;
+      border: none;
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    .btn:hover {
+      background: var(--primary-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    /* 页脚优化 */
+    .site-footer {
+      background: var(--dark-bg);
+      color: var(--text-light);
+      padding: 3rem 0;
+      margin-top: 4rem;
+    }
+
+    .site-footer p {
+      opacity: 0.9;
+      font-size: 0.95rem;
+      line-height: 1.8;
+    }
+
+    /* 响应式优化 */
+    @media (max-width: 768px) {
+      html {
+        font-size: 15px;
+      }
+
+      .site-title {
+        font-size: 2rem;
+      }
+
+      .site-subtitle {
+        font-size: 1rem;
+      }
+
+      .cards-row {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+      }
+
+      .card {
+        padding: 1.5rem;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <header class="site-header" role="banner">
+    <div class="container">
+      <h1 class="site-title">一个大多数由AI创建的分享网站🫠</h1>
+      <p class="site-subtitle">
+        在这里将会分享一些有趣的东西
+      </p>
+    </div>
+  </header>
+
+  <main class="main-content" role="main">
+    <div class="container">
+      <section class="cards-row" aria-label="？">
+      
+        <article class="card" role="article">
+          <h2>Deepseek R1</h2>
+          <p>使用手机号登录，DeepSeek-R1是国内的低成本、高性能思考模型，可以联网。</p>
+          <a href="https://www.deepseek.com/" class="btn" target="_blank" rel="noopener">
+            立即访问
+          </a>
+        </article>
+        
+        <article class="card" role="article">
+          <h2>ValueAIV2五子棋AI</h2>
+          <p>由o3-mini-high完成的五子棋AI，2次优化。</p>
+          <a href="https://shangbai6.github.io/mmexp" class="btn" target="_blank" rel="noopener">
+            立即访问
+          </a>
+        </article>
+        
+        <article class="card" role="article">
+          <h2>R1的五子棋AI</h2>
+          <p>由R1完成的五子棋AI，数十次优化。</p>
+          <a href="https://shangbai6.github.io/mm3" class="btn" target="_blank" rel="noopener">
+            立即访问
+          </a>
+        </article>
+        
+        <!-- 其他卡片结构类似 -->
+      </section>
+
+      <!-- 其他卡片组 -->
+    </div>
+  </main>
+
+  <footer class="site-footer" role="contentinfo">
+    <div class="container">
+      <p role="contentinfo">本导航站仅提供聚合跳转，不收集用户任何信息。</p>
+      <p>sehsapneb  ; <span id="year"></span>    </p>
+    </div>
+  </footer>
+
+  <script>
+    // 自动年份 + 性能优化
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('year').textContent = new Date().getFullYear();
+      
+      // 延迟加载非关键资源（示例）
+      const lazyLoad = () => {
+        if ('loading' in HTMLImageElement.prototype) {
+          const images = document.querySelectorAll('img[loading="lazy"]');
+          images.forEach(img => {
+            img.src = img.dataset.src;
+          });
+        }
+      };
+      window.addEventListener('load', lazyLoad);
+    });
+  </script>
+</body>
 </html>
