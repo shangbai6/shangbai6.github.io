@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>三国杀游戏</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f0f0f0;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+    }
+
+    #game {
+      max-width: 800px;
+      width: 100%;
+      margin: 20px;
+      background: #fff;
+      border: 1px solid #ccc;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    h1 {
+      text-align: center;
+    }
+
+    #players {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .player {
+      width: 48%;
+      border: 1px solid #aaa;
+      padding: 5px;
+      margin: 5px;
+      background: #f9f9f9;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .hand {
+      margin-top: 5px;
+      display: flex;
+      flex-wrap: wrap;
+    }
+
+    .card {
+      display: inline-block;
+      border: 1px solid #333;
+      padding: 3px 5px;
+      margin: 2px;
+      background-color: #fff;
+      cursor: pointer;
+      border-radius: 3px;
+    }
+
+    #log {
+      border: 1px solid #333;
+      background-color: #eee;
+      height: 200px;
+      overflow-y: auto;
+      padding: 5px;
+      white-space: pre-wrap;
+      margin-top: 20px;
+    }
+
+    #controls {
+      margin-top: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    #controls button {
+      margin: 5px;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+      background-color: #e7e7e7;
+      width: 80%;
+      max-width: 200px;
+    }
+
+    #controls button:hover {
+      background-color: #ddd;
+    }
+
+    @media (max-width: 768px) {
+      .player {
+        width: 100%;
+      }
+      #controls button {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="game">
+    <h1>三国杀游戏</h1>
+    <div id="players"></div>
+    <div id="log"></div>
+    <div id="controls"></div>
+  </div>
+  
+  <script>
+    // 延迟函数
+    function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+    
+    // 日志输出
+    function log(message) {
+      const logDiv = document.getElementById("log");
+      logDiv.innerText += message + "\n";
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    // 更新玩家信息显示
+    function updatePlayersUI(players) {
+      const playersDiv = document.getElementById("players");
+      playersDiv.innerHTML = "";
+      players.forEach(p => {
+        const div = document.createElement("div");
+        div.className = "player";
+        div.innerText = p.status();
+        // 显示玩家手牌
+        if (!p.isAI) {
+          const handDiv = document.createElement("div");
+          handDiv.className = "hand";
+          p.hand.forEach(card => {
+            const cardSpan = document.createElement("span");
+            cardSpan.className = "card";
+            cardSpan.innerText = card.toString();
+            handDiv.appendChild(cardSpan);
+          });
+          div.appendChild(handDiv);
+        }
+        playersDiv.appendChild(div);
+      });
+    }
+
+    // 清空操作区
+    function clearControls() {
+      document.getElementById("controls").innerHTML = "";
+    }
+
+    // 牌类定义
+    class Card {
+      constructor(name, color, suit, value) {
+        this.name = name;
+        this.color = color;
+        this.suit = suit;
+        this.value = value;
+      }
+      toString() {
+        if (this.suit) {
+          return `${this.suit}${this.value}${this.name}(${this.color ? this.color[0] : ''})`;
+        }
+        return this.color ? `${this.name}(${this.color[0]})` : this.name;
+      }
+    }
+
+    // 玩家类
+    class Player {
+      constructor(name, isAI = false, maxHP = 4, role = "平民") {
+        this.name = name;
+        this.hp = maxHP;
+        this.maxHP = maxHP;
+        this.hand = [];
+        this.equipment = {
+          "武器": null,
+          "防具": null,
+          "-1马": null,
+          "+1马": null
+        };
+        this.isAI = isAI;
+        this.role = role;
+        this.delayed = [];
+      }
+      status() {
+        let s = `${this.name}(${this.role}) HP: ${this.hp}/${this.maxHP}`;
+        let equip = [];
+        for (let key in this.equipment) {
+          if (this.equipment[key]) {
+            equip.push(`${key}: ${this.equipment[key].toString()}`);
+          }
+        }
+        if (equip.length) s += "\n装备: " + equip.join(", ");
+        if (this.delayed.length) s += "\n延时: " + this.delayed.map(c => c.toString()).join(", ");
+        return s;
+      }
+    }
+
+    // 游戏类
+    class SGSGame {
+      constructor(players) {
+        this.players = players;
+        this.deck = this.createDeck();
+        this.discardPile = [];
+        this.currentPlayerIndex = 0;
+        this.shuffleDeck();
+        // 每个玩家初始摸4张牌
+        for (let p of this.players) {
+          this.drawCards(p, 4);
+        }
+        updatePlayersUI(this.players);
+      }
+
+      // 根据规则创建 52 张牌
+      createDeck() {
+        let cards = [];
+        const suits = { '黑': ['♠', '♣'], '红': ['♥', '♦'] };
+        // 15 张黑杀
+        for (let i = 0; i < 15; i++) {
+          let suit = suits['黑'][Math.floor(Math.random() * suits['黑'].length)];
+          cards.push(new Card("杀", "黑", suit, Math.floor(Math.random() * 13) + 1));
+        }
+        // 5 张红杀
+        for (let i = 0; i < 5; i++) {
+          let suit = suits['红'][Math.floor(Math.random() * suits['红'].length)];
+          cards.push(new Card("杀", "红", suit, Math.floor(Math.random() * 13) + 1));
+        }
+        // 15 张闪（均为红色）
+        for (let i = 0; i < 15; i++) {
+          let suit = suits['红'][Math.floor(Math.random() * suits['红'].length)];
+          cards.push(new Card("闪", "红", suit, Math.floor(Math.random() * 13) + 1));
+        }
+        // 5 张桃
+        for (let i = 0; i < 5; i++) {
+          cards.push(new Card("桃", "红", "♥", Math.floor(Math.random() * 13) + 1));
+        }
+
+        // 装备牌
+        cards.push(new Card("仁王盾", "黑", "♠", 2));
+        cards.push(new Card("八卦阵", "红", "♥", 2));
+        for (let i = 0; i < 2; i++) {
+          cards.push(new Card("诸葛连弩", "黑", "♠", 1));
+        }
+        cards.push(new Card("赤兔", "红", "♥", 3));
+        cards.push(new Card("的卢", "白", "♦", 3));
+
+        // 锦囊牌
+        for (let i = 0; i < 3; i++) {
+          cards.push(new Card("过河拆桥", "黑", "♠", 3));
+        }
+        for (let i = 0; i < 2; i++) {
+          cards.push(new Card("无懈可击", "黑", "♣", 1));
+        }
+        cards.push(new Card("南蛮入侵", "黑", "♠", 7));
+        cards.push(new Card("万箭齐发", "红", "♥", 6));
+
+        cards = this.shuffleArray(cards);
+        return cards.slice(0, 52);
+      }
+
+      // 洗牌
+      shuffleDeck() {
+        this.deck = this.shuffleArray(this.deck);
+      }
+
+      // 通用洗牌函数
+      shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+      }
+
+      // 摸牌函数
+      drawCards(player, num) {
+        for (let i = 0; i < num; i++) {
+          if (this.deck.length === 0) {
+            this.deck = this.shuffleArray(this.discardPile.slice());
+            this.discardPile = [];
+            log(`${player.name} 牌堆已洗牌`);
+          }
+          if (this.deck.length > 0) {
+            let card = this.deck.pop();
+            player.hand.push(card);
+            if (player.isAI) {
+              log(`${player.name} 获得 ${card.toString()}`);
+            }
+          }
+        }
+        updatePlayersUI(this.players);
+      }
+
+      // 返回当前存活玩家
+      getAlivePlayers() {
+        return this.players.filter(p => p.hp > 0);
+      }
+
+      // 攻击范围，目前默认都是 1（诸葛连弩例外）
+      getAttackRange(player) {
+        if (player.equipment["武器"] && player.equipment["武器"].name === "诸葛连弩") {
+          return 1;
+        }
+        return 1;
+      }
+
+      // 计算两玩家距离（环形排列）
+      getDistance(a, b) {
+        let alive = this.getAlivePlayers();
+        let idx_a = alive.indexOf(a);
+        let idx_b = alive.indexOf(b);
+        if (idx_a === -1 || idx_b === -1) return 999;
+        let raw = Math.min(Math.abs(idx_a - idx_b), alive.length - Math.abs(idx_a - idx_b));
+        if (a.equipment["-1马"]) raw -= 1;
+        if (b.equipment["+1马"]) raw += 1;
+        return Math.max(raw, 1);
+      }
+
+      // 仁王盾处理：如果目标装备仁王盾且受到黑色牌攻击，则该牌无效
+      handleRenwang(target, card) {
+        if (target.equipment["防具"] && target.equipment["防具"].name === "仁王盾") {
+          if (card.color === "黑") {
+            log(`${target.name} 的仁王盾抵挡 ${card.toString()} → 无效`);
+            return true;
+          }
+        }
+        return false;
+      }
+
+      // 处理出杀逻辑
+      async playKill(source, target, card) {
+        log(`${source.name} 对 ${target.name} 使用 ${card.toString()}`);
+        if (this.handleRenwang(target, card)) {
+          return;
+        }
+        // 目标响应出闪
+        if (target.isAI) {
+          log(`${target.name} 正在考虑出闪...`);
+          await sleep(500);
+          let shans = target.hand.filter(c => c.name === "闪");
+          if (shans.length > 0) {
+            let chosen = shans.find(c => c.color === "红") || shans[0];
+            target.hand.splice(target.hand.indexOf(chosen), 1);
+            log(`${target.name} 打出 ${chosen.toString()} 抵消`);
+            updatePlayersUI(this.players);
+            return;
+          }
+        } else {
+          let shans = target.hand.filter(c => c.name === "闪");
+          if (shans.length > 0) {
+            let useShan = await this.promptUser(`${target.name} 受到 ${source.name} 的 ${card.toString()} 攻击！请选择是否打出闪抵消`, ["打出闪", "不打出"]);
+            if (useShan === "打出闪") {
+              let chosen = shans[0];
+              target.hand.splice(target.hand.indexOf(chosen), 1);
+              log(`你打出 ${chosen.toString()} 抵消攻击`);
+              updatePlayersUI(this.players);
+              return;
+            }
+          }
+        }
+        // 无法响应则造成伤害
+        target.hp -= 1;
+        log(`${source.name} 造成伤害, ${target.name} HP: ${target.hp}`);
+        this.handleDying(target);
+        updatePlayersUI(this.players);
+      }
+
+      // 濒死处理
+      handleDying(target) {
+        if (target.hp > 0) return;
+        log(`${target.name} 濒死！`);
+        let peaches = target.hand.filter(c => c.name === "桃");
+        if (peaches.length > 0) {
+          if (target.isAI) {
+            log(`${target.name} 使用桃自救`);
+            target.hand.splice(target.hand.indexOf(peaches[0]), 1);
+            target.hp = 1;
+          } else {
+            log(`你使用桃自救`);
+            target.hand.splice(target.hand.indexOf(peaches[0]), 1);
+            target.hp = 1;
+          }
+        } else {
+          log(`${target.name} 阵亡！`);
+          if (target.isAI) {
+            this.players = this.players.filter(p => p !== target);
+          }
+        }
+      }
+
+      // AI 出牌阶段
+      async aiPlayTurn(player) {
+        log(`${player.name} 开始出牌阶段`);
+        await sleep(500);
+        // 使用桃回复
+        if (player.hp <= 2) {
+          let peaches = player.hand.filter(c => c.name === "桃");
+          if (peaches.length > 0) {
+            player.hand.splice(player.hand.indexOf(peaches[0]), 1);
+            player.hp = Math.min(player.hp + 1, player.maxHP);
+            log(`${player.name} 使用桃回复 HP: ${player.hp}`);
+            updatePlayersUI(this.players);
+            await sleep(500);
+          }
+        }
+        // 装备防具
+        if (!player.equipment["防具"]) {
+          let renwang = player.hand.find(c => c.name === "仁王盾");
+          if (renwang) {
+            player.equipment["防具"] = renwang;
+            player.hand.splice(player.hand.indexOf(renwang), 1);
+            log(`${player.name} 装备 ${renwang.toString()}`);
+            updatePlayersUI(this.players);
+            await sleep(500);
+          }
+        }
+        // 发动【南蛮入侵】
+        let nanman = player.hand.find(c => c.name === "南蛮入侵");
+        if (nanman) {
+          player.hand.splice(player.hand.indexOf(nanman), 1);
+          log(`${player.name} 发动【南蛮入侵】`);
+          updatePlayersUI(this.players);
+          await this.handleNanman(player);
+          return;
+        }
+        // 普通出杀
+        let targets = this.getAlivePlayers().filter(p => p !== player && this.getDistance(player, p) <= this.getAttackRange(player));
+        if (targets.length > 0) {
+          targets.sort((a, b) => a.hp - b.hp);
+          let target = targets[0];
+          let kills = player.hand.filter(c => c.name === "杀");
+          if (kills.length > 0) {
+            let kill_card = kills.find(c => c.color === "黑") || kills[0];
+            player.hand.splice(player.hand.indexOf(kill_card), 1);
+            await this.playKill(player, target, kill_card);
+          }
+        }
+        await this.discardPhase(player);
+      }
+
+      // 处理【南蛮入侵】逻辑
+      async handleNanman(source) {
+        log("【南蛮入侵】生效！");
+        let alive = this.getAlivePlayers();
+        for (let p of alive) {
+          if (p === source) continue;
+          await sleep(500);
+          log(`目标: ${p.name}`);
+          if (p.isAI) {
+            log(`${p.name} 需要打出杀`);
+            await sleep(300);
+            let killCard = p.hand.find(c => c.name === "杀");
+            if (killCard) {
+              p.hand.splice(p.hand.indexOf(killCard), 1);
+              log(`${p.name} 打出 ${killCard.toString()}`);
+            } else {
+              p.hp -= 1;
+              log(`${p.name} 无法响应，HP: ${p.hp}`);
+              this.handleDying(p);
+            }
+          } else {
+            let response = await this.promptUser(`${p.name}，请打出杀响应【南蛮入侵】`, ["打出杀", "跳过"]);
+            if (response === "打出杀") {
+              let killCard = p.hand.find(c => c.name === "杀");
+              if (killCard) {
+                p.hand.splice(p.hand.indexOf(killCard), 1);
+                log(`${p.name} 响应成功`);
+              } else {
+                p.hp -= 1;
+                log(`${p.name} 无杀可出，HP: ${p.hp}`);
+                this.handleDying(p);
+              }
+            } else {
+              p.hp -= 1;
+              log(`${p.name} 跳过响应，HP: ${p.hp}`);
+              this.handleDying(p);
+            }
+          }
+          updatePlayersUI(this.players);
+        }
+      }
+
+      // 弃牌阶段：手牌数量不得超过当前生命值
+      async discardPhase(player) {
+        let maxKeep = player.hp;
+        if (player.hand.length <= maxKeep) return;
+        log(`${player.name} 进入弃牌阶段`);
+        while (player.hand.length > maxKeep) {
+          let discardCount = player.hand.length - maxKeep;
+          if (player.isAI) {
+            log(`${player.name} 需要弃掉 ${discardCount} 张牌`);
+            await sleep(300);
+            let discard = player.hand.find(c => (c.name === "杀" && c.color !== "红") || (c.name === "闪" && c.color !== "红"));
+            if (!discard) {
+              discard = player.hand[0];
+            }
+            player.hand.splice(player.hand.indexOf(discard), 1);
+            this.discardPile.push(discard);
+            log(`${player.name} 弃掉 ${discard.toString()}`);
+            await sleep(300);
+          } else {
+            let chosen = await this.promptCardSelection(player.hand, `请弃掉 ${discardCount} 张牌`);
+            if (Array.isArray(chosen)) {
+              chosen.forEach(card => {
+                let index = player.hand.indexOf(card);
+                if (index !== -1) {
+                  player.hand.splice(index, 1);
+                  this.discardPile.push(card);
+                  log(`弃掉 ${card.toString()}`);
+                }
+              });
+            }
+          }
+          updatePlayersUI(this.players);
+        }
+      }
+
+      // 提示玩家选择一个操作（返回 Promise）
+      promptUser(message, options) {
+        return new Promise(resolve => {
+          clearControls();
+          const controls = document.getElementById("controls");
+          const msg = document.createElement("div");
+          msg.innerText = message;
+          controls.appendChild(msg);
+          options.forEach(option => {
+            const btn = document.createElement("button");
+            btn.innerText = option;
+            btn.onclick = () => {
+              clearControls();
+              resolve(option);
+            };
+            controls.appendChild(btn);
+          });
+        });
+      }
+
+      // 提示玩家从牌堆中选择一个或多个牌（返回选择的牌数组）
+      promptCardSelection(cards, message) {
+        return new Promise(resolve => {
+          clearControls();
+          const controls = document.getElementById("controls");
+          const msg = document.createElement("div");
+          msg.innerText = message;
+          controls.appendChild(msg);
+          let selected = [];
+          cards.forEach(card => {
+            const btn = document.createElement("button");
+            btn.innerText = card.toString();
+            btn.onclick = () => {
+              if (selected.includes(card)) {
+                selected = selected.filter(c => c !== card);
+                btn.style.backgroundColor = "";
+              } else {
+                selected.push(card);
+                btn.style.backgroundColor = "#aaf";
+              }
+            };
+            controls.appendChild(btn);
+          });
+          const confirmBtn = document.createElement("button");
+          confirmBtn.innerText = "确定";
+          confirmBtn.onclick = () => {
+            clearControls();
+            resolve(selected);
+          };
+          controls.appendChild(confirmBtn);
+        });
+      }
+
+      // 人类玩家回合
+      async humanTurn(player) {
+        log("你的回合开始");
+        updatePlayersUI(this.players);
+        let turnOver = false;
+        while (!turnOver) {
+          let action = await this.promptUser("请选择行动：", ["出杀", "使用桃", "装备", "锦囊", "结束回合"]);
+          if (action === "出杀") {
+            let kills = player.hand.filter(c => c.name === "杀");
+            if (kills.length === 0) {
+              log("没有可用的杀");
+              continue;
+            }
+            let killChoice = await this.promptCardSelection(kills, "请选择要使用的杀");
+            if (!killChoice || killChoice.length === 0) continue;
+            let kill_card = killChoice[0];
+            let targets = this.getAlivePlayers().filter(p => p !== player && this.getDistance(player, p) <= this.getAttackRange(player));
+            if (targets.length === 0) {
+              log("没有可攻击目标");
+              continue;
+            }
+            let targetNames = targets.map(p => p.name);
+            let targetName = await this.promptUser("请选择目标：", targetNames);
+            let target = targets.find(p => p.name === targetName);
+            player.hand.splice(player.hand.indexOf(kill_card), 1);
+            await this.playKill(player, target, kill_card);
+          } else if (action === "使用桃") {
+            let peaches = player.hand.filter(c => c.name === "桃");
+            if (peaches.length === 0) {
+              log("没有桃可用");
+              continue;
+            }
+            if (player.hp >= player.maxHP) {
+              log("生命值已满");
+              continue;
+            }
+            player.hand.splice(player.hand.indexOf(peaches[0]), 1);
+            player.hp = Math.min(player.hp + 1, player.maxHP);
+            log(`使用桃，HP回复至 ${player.hp}`);
+            updatePlayersUI(this.players);
+          } else if (action === "装备") {
+            let equips = player.hand.filter(c => ["仁王盾", "诸葛连弩", "赤兔"].includes(c.name));
+            if (equips.length === 0) {
+              log("没有可装备的牌");
+              continue;
+            }
+            let equipChoice = await this.promptCardSelection(equips, "请选择要装备的牌");
+            if (!equipChoice || equipChoice.length === 0) continue;
+            let equip = equipChoice[0];
+            let slot = "";
+            if (equip.name === "仁王盾") {
+              slot = "防具";
+            } else if (equip.name === "诸葛连弩") {
+              slot = "武器";
+            } else {
+              slot = "-1马";
+            }
+            if (player.equipment[slot]) {
+              this.discardPile.push(player.equipment[slot]);
+            }
+            player.equipment[slot] = equip;
+            player.hand.splice(player.hand.indexOf(equip), 1);
+            log(`装备 ${equip.toString()}`);
+            updatePlayersUI(this.players);
+          } else if (action === "锦囊") {
+            let tricks = player.hand.filter(c => ["过河拆桥", "无懈可击"].includes(c.name));
+            if (tricks.length === 0) {
+              log("没有可用锦囊");
+              continue;
+            }
+            let trickChoice = await this.promptCardSelection(tricks, "请选择要使用的锦囊");
+            if (!trickChoice || trickChoice.length === 0) continue;
+            let trick = trickChoice[0];
+            if (trick.name === "过河拆桥") {
+              let targets = this.getAlivePlayers().filter(p => p !== player);
+              let targetNames = targets.map(p => p.name);
+              let targetName = await this.promptUser("请选择目标：", targetNames);
+              let target = targets.find(p => p.name === targetName);
+              if (target.isAI) {
+                log(`${target.name} 有 ${target.hand.length} 张牌`);
+                let discard = target.hand[Math.floor(Math.random() * target.hand.length)];
+                player.hand.splice(player.hand.indexOf(trick), 1);
+                this.discardPile.push(discard);
+                log(`弃置 ${discard.toString()}`);
+              } else {
+                let chosen = await this.promptCardSelection(target.hand, `${target.name} 的手牌，请选择要弃置的牌`);
+                if (chosen.length > 0) {
+                  let discard = chosen[0];
+                  target.hand.splice(target.hand.indexOf(discard), 1);
+                  player.hand.splice(player.hand.indexOf(trick), 1);
+                  this.discardPile.push(discard);
+                  log(`弃置 ${discard.toString()}`);
+                }
+              }
+              updatePlayersUI(this.players);
+            }
+          } else if (action === "结束回合") {
+            turnOver = true;
+          }
+        }
+        await this.discardPhase(player);
+      }
+
+      // 游戏主循环
+      async run() {
+        while (true) {
+          let alivePlayers = this.getAlivePlayers();
+          if (alivePlayers.length === 1) {
+            log(`游戏结束！胜利者：${alivePlayers[0].name}`);
+            break;
+          }
+          let current = this.players[this.currentPlayerIndex];
+          if (current.hp <= 0) {
+            this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
+            continue;
+          }
+          log("============================================");
+          log(`${current.name} 的回合`);
+          // 判定阶段（此处略过，可扩展相关效果）
+          this.drawCards(current, 2);
+          if (current.isAI) {
+            await this.aiPlayTurn(current);
+          } else {
+            await this.humanTurn(current);
+          }
+          this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
+          await sleep(1000);
+        }
+      }
+    }
+
+    // 游戏入口
+    window.onload = async function() {
+      log("=== 三国杀游戏开始 ===");
+      let players = [
+        new Player("玩家", false, 5, "主公"),
+        new Player("AI-曹操", true),
+        new Player("AI-孙权", true),
+        new Player("AI-刘备", true)
+      ];
+      let game = new SGSGame(players);
+      await game.run();
+    };
+  </script>
+</body>
+</html>
