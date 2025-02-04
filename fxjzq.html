@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>反向井字棋游戏</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin: 20px;
+      background-color: #fafafa;
+    }
+    h1 {
+      color: #333;
+    }
+    #board {
+      display: grid;
+      grid-template-columns: repeat(3, 100px);
+      grid-gap: 5px;
+      justify-content: center;
+      margin: 20px auto;
+    }
+    .cell {
+      width: 100px;
+      height: 100px;
+      font-size: 2em;
+      cursor: pointer;
+    }
+    #start-options button {
+      margin: 10px;
+      padding: 10px 20px;
+      font-size: 1em;
+      cursor: pointer;
+    }
+    #message {
+      margin-top: 20px;
+      font-size: 1.2em;
+      font-weight: bold;
+      color: #222;
+    }
+  </style>
+</head>
+<body>
+  <h1>反向井字棋游戏</h1>
+  <!-- 游戏开始前选择先手或后手 -->
+  <div id="start-options">
+    <button id="first">先手 (玩家先走)</button>
+    <button id="second">后手 (AI先走)</button>
+  </div>
+  <!-- 棋盘区域 -->
+  <div id="board"></div>
+  <!-- 状态提示区域 -->
+  <div id="message"></div>
+
+  <script>
+    // 游戏状态变量
+    let board;
+    let currentPlayer;
+    let gameActive = false;
+    // 玩家与AI的标记固定：玩家 "X"，AI "O"
+    const playerMarker = "X";
+    const aiMarker = "O";
+
+    // 初始化棋盘（3x3）
+    function initBoard() {
+      board = [
+        [" ", " ", " "],
+        [" ", " ", " "],
+        [" ", " ", " "]
+      ];
+    }
+
+    // 根据棋盘状态渲染界面
+    function renderBoard() {
+      const boardDiv = document.getElementById("board");
+      boardDiv.innerHTML = ""; // 清空原有内容
+      for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 3; j++) {
+          const cellButton = document.createElement("button");
+          cellButton.className = "cell";
+          cellButton.dataset.row = i;
+          cellButton.dataset.col = j;
+          // 如果该位置还未落子，则显示位置数字作为提示（1-9）
+          if (board[i][j] === " ") {
+            cellButton.textContent = i * 3 + j + 1;
+          } else {
+            cellButton.textContent = board[i][j];
+          }
+          cellButton.addEventListener("click", onCellClick);
+          boardDiv.appendChild(cellButton);
+        }
+      }
+    }
+
+    // 更新提示消息
+    function updateMessage(msg) {
+      document.getElementById("message").textContent = msg;
+    }
+
+    // 检查指定玩家是否形成三连（无论横、竖还是对角）
+    function checkWin(b, player) {
+      // 检查行和列
+      for (let i = 0; i < 3; i++) {
+        if ((b[i][0] === player && b[i][1] === player && b[i][2] === player) ||
+            (b[0][i] === player && b[1][i] === player && b[2][i] === player)) {
+          return true;
+        }
+      }
+      // 检查两条对角线
+      if ((b[0][0] === player && b[1][1] === player && b[2][2] === player) ||
+          (b[0][2] === player && b[1][1] === player && b[2][0] === player)) {
+        return true;
+      }
+      return false;
+    }
+
+    // 检查棋盘是否已满
+    function boardFull() {
+      for (let row of board) {
+        for (let cell of row) {
+          if (cell === " ") return false;
+        }
+      }
+      return true;
+    }
+
+    // 带 Alpha-Beta 剪枝的 Minimax 算法
+    // 注意：在本游戏中形成三连即为“输局”，因此若己方落子后形成三连则应跳过该走法。
+    function minimax(b, depth, isMaximizing, alpha, beta) {
+      if (checkWin(b, aiMarker)) return -1; // 若AI形成三连，则AI输
+      if (checkWin(b, playerMarker)) return 1;  // 若玩家形成三连，则玩家输
+      if (boardFull()) return 0;               // 平局
+
+      if (isMaximizing) {
+        let maxEval = -Infinity;
+        for (let i = 0; i < 3; i++) {
+          for (let j = 0; j < 3; j++) {
+            if (b[i][j] === " ") {
+              b[i][j] = aiMarker;
+              // 若这一走法直接形成三连，则不计入评估（直接回退）
+              if (!checkWin(b, aiMarker)) {
+                let eval = minimax(b, depth + 1, false, alpha, beta);
+                maxEval = Math.max(maxEval, eval);
+                alpha = Math.max(alpha, eval);
+              }
+              b[i][j] = " ";
+              if (beta <= alpha) break;
+            }
+          }
+        }
+        return maxEval;
+      } else {
+        let minEval = Infinity;
+        for (let i = 0; i < 3; i++) {
+          for (let j = 0; j < 3; j++) {
+            if (b[i][j] === " ") {
+              b[i][j] = playerMarker;
+              if (!checkWin(b, playerMarker)) {
+                let eval = minimax(b, depth + 1, true, alpha, beta);
+                minEval = Math.min(minEval, eval);
+                beta = Math.min(beta, eval);
+              }
+              b[i][j] = " ";
+              if (beta <= alpha) break;
+            }
+          }
+        }
+        return minEval;
+      }
+    }
+
+    // 寻找 AI 的最佳走法
+    function findBestMove() {
+      let bestVal = -Infinity;
+      let bestMove = [-1, -1];
+      for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 3; j++) {
+          if (board[i][j] === " ") {
+            board[i][j] = aiMarker;
+            if (checkWin(board, aiMarker)) {
+              board[i][j] = " ";
+              continue;
+            }
+            let moveVal = minimax(board, 0, false, -Infinity, Infinity);
+            board[i][j] = " ";
+            if (moveVal > bestVal) {
+              bestVal = moveVal;
+              bestMove = [i, j];
+            }
+          }
+        }
+      }
+      // 如果没有找到合适的最佳走法，返回第一个空位
+      if (bestMove[0] === -1) {
+        for (let i = 0; i < 3; i++) {
+          for (let j = 0; j < 3; j++) {
+            if (board[i][j] === " ") {
+              return [i, j];
+            }
+          }
+        }
+      }
+      return bestMove;
+    }
+
+    // 当玩家点击棋盘格时触发的事件处理函数
+    function onCellClick(event) {
+      if (!gameActive) return;
+      // 只有在玩家回合才能点击
+      if (currentPlayer !== playerMarker) return;
+      const row = parseInt(event.target.dataset.row);
+      const col = parseInt(event.target.dataset.col);
+      if (board[row][col] !== " ") return;
+
+      board[row][col] = playerMarker;
+      renderBoard();
+
+      // 如果玩家落子后形成三连，则判定玩家输
+      if (checkWin(board, playerMarker)) {
+        updateMessage("你形成了三连，你输了！");
+        gameActive = false;
+        return;
+      }
+      
+      // 检查平局
+      if (boardFull()) {
+        updateMessage("平局！");
+        gameActive = false;
+        return;
+      }
+      
+      // 切换到 AI 回合，并稍作延时后执行 AI 走法
+      currentPlayer = aiMarker;
+      updateMessage("AI 正在思考...");
+      setTimeout(aiMove, 500);
+    }
+
+    // AI 的走法逻辑
+    function aiMove() {
+      let bestMove = findBestMove();
+      let row = bestMove[0], col = bestMove[1];
+      board[row][col] = aiMarker;
+      renderBoard();
+
+      // 若 AI 落子导致三连，则 AI 输，玩家获胜
+      if (checkWin(board, aiMarker)) {
+        updateMessage("AI 形成了三连，AI 输了！你赢了！");
+        gameActive = false;
+        return;
+      }
+
+      // 检查平局情况
+      if (boardFull()) {
+        updateMessage("平局！");
+        gameActive = false;
+        return;
+      }
+      
+      // 切换回玩家回合
+      currentPlayer = playerMarker;
+      updateMessage("你的回合。");
+    }
+
+    // 根据玩家选择的先手或后手开始新游戏
+    // 参数 firstTurn 为 true 表示玩家先走，否则 AI 先走
+    function startGame(firstTurn) {
+      initBoard();
+      renderBoard();
+      gameActive = true;
+      if (firstTurn) {
+        currentPlayer = playerMarker;
+        updateMessage("你的回合。");
+      } else {
+        currentPlayer = aiMarker;
+        updateMessage("AI 正在思考...");
+        setTimeout(aiMove, 500);
+      }
+      // 隐藏开始选择区域
+      document.getElementById("start-options").style.display = "none";
+    }
+
+    // 为“先手”和“后手”的按钮绑定事件
+    document.getElementById("first").addEventListener("click", function() {
+      startGame(true);
+    });
+    document.getElementById("second").addEventListener("click", function() {
+      startGame(false);
+    });
+  </script>
+</body>
+</html>
