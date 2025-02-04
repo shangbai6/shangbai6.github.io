@@ -364,6 +364,24 @@
         transition: none !important;
       }
     }
+
+    /* ====================================
+       新增响应式图片样式
+       手机端保持100%宽度，电脑端设为固定宽度（如600px）
+    ======================================*/
+    .responsive-img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: var(--border-radius);
+      margin-top: var(--gap);
+    }
+    
+    @media (min-width: 1024px) {
+      .responsive-img {
+        width: 600px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -397,7 +415,8 @@
         <p>在这里您将探索各种有趣的AI项目，或者访问作者的网站收藏夹。</p>
         <p>关于这个网站，所有资源都是免费获取的，希望大家多多指教🐑</p>
         
-        <img src="https://shangbai6.github.io/AAF08F02-C32F-4960-A519-CF92260C6F83.jpeg" alt="展示大图" style="width: 100%; border-radius: var(--border-radius); margin-top: var(--gap);">
+        <!-- 修改后的大图：在手机端宽度100%，在桌面端宽度固定为600px -->
+        <img src="https://shangbai6.github.io/AAF08F02-C32F-4960-A519-CF92260C6F83.jpeg" alt="展示大图" class="responsive-img">
       </article>
     </section>
 
@@ -462,8 +481,6 @@
           <p>免费图床，无需多言。</p>
           <a href="https://telegraph-image-92x.pages.dev/" class="btn" target="_blank" rel="noopener">立即访问</a>
         </article>
-        
-        <!-- 此处可继续添加更多收藏内容 -->
       </div>
     </section>
   </main>
@@ -475,7 +492,7 @@
     </div>
   </footer>
 
-  <!-- 悬浮趣味按钮：点击触发confetti和趣味语 -->
+  <!-- 悬浮趣味按钮 -->
   <button class="fun-btn" aria-label="趣味功能">🎉</button>
 
   <!-- 趣味语 Toast -->
@@ -504,7 +521,6 @@
       const darkToggle = document.querySelector('.dark-mode-toggle');
       darkToggle.addEventListener('click', function() {
         document.body.classList.toggle('dark-mode');
-        // 根据当前状态切换图标
         this.textContent = document.body.classList.contains('dark-mode') ? '☀️' : '🌙';
       });
 
@@ -520,19 +536,13 @@
       ];
       
       funBtn.addEventListener('click', () => {
-        // 显示随机趣味语
         const randomQuote = quotes[Math.floor(Math.random() * quotes.length)];
         funQuote.textContent = randomQuote;
         funQuote.style.opacity = 1;
-        setTimeout(() => {
-          funQuote.style.opacity = 0;
-        }, 3000);
-        
-        // 启动 confetti 效果
+        setTimeout(() => { funQuote.style.opacity = 0; }, 3000);
         launchConfetti(100);
       });
       
-      // Confetti 效果函数
       function launchConfetti(count) {
         const colors = ['#FFC700', '#FF0000', '#2E3191', '#41BBC7', '#7F00FF'];
         for (let i = 0; i < count; i++) {
