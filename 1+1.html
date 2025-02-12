@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>加满十游戏 AI对战</title>
+  <style>
+    body { font-family: sans-serif; }
+    .token {
+      display: inline-block;
+      margin: 5px;
+      padding: 10px;
+      border: 1px solid #333;
+      cursor: pointer;
+      width: 50px;
+      text-align: center;
+      user-select: none;
+    }
+    .selected {
+      background-color: yellow;
+    }
+    .removed {
+      background-color: #ccc;
+      cursor: default;
+    }
+    #board {
+      margin-top: 20px;
+    }
+    #ai-settings {
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>加满十游戏 (Reach-10 Game)</h1>
+  <p>
+    规则说明：<br>
+    - 每个玩家各有两个初始为 1 的数字；<br>
+    - 每步走时，当前玩家先从自己未撤去的数字中选择一个，再从对手未撤去的数字中选择一个，将它们相加；<br>
+    - 如果相加结果正好为 10，则该 token 被撤去（置为“已撤”）；<br>
+    - 否则，无论奇偶，都取相加结果的个位数字作为新的数值；<br>
+    - 当一方两个数字均撤去时，该方获胜。
+  </p>
+  <div id="ai-settings">
+    <label for="depthSlider">AI搜索深度: <span id="depthValue">17</span></label>
+    <input type="range" id="depthSlider" min="15" max="20" value="17">
+  </div>
+  <div id="message"></div>
+  <div id="board">
+    <div id="human-area">
+      <h2>你 (Human)</h2>
+      <div id="p1-tokens"></div>
+    </div>
+    <div id="ai-area">
+      <h2>AI</h2>
+      <div id="p2-tokens"></div>
+    </div>
+  </div>
+  <button id="restartBtn">重新开始</button>
+
+  <script>
+  /********************************************************************
+   * 状态说明：
+   * 状态对象包含：
+   *   p1: [a, b] —— 人类的两个数字（被撤去时记为 null）
+   *   p2: [c, d] —— AI 的两个数字（被撤去时记为 null）
+   *   turn: 1 或 2 —— 当前走子方（1 表示人类，2 表示 AI）
+   ********************************************************************/
+  
+  let currentState;
+  let selectedTokenIndex = null; // 人类选中自己 token 的索引（0 或 1）
+  let aiSearchDepth = 4;         // 默认 AI 搜索深度
+  
+  // 新游戏：初始化状态
+  function newGame() {
+    currentState = {
+      p1: [1, 1],
+      p2: [1, 1],
+      turn: 1  // 人类先手
+    };
+    selectedTokenIndex = null;
+    updateBoard();
+    setMessage("你的回合");
+  }
+  
+  // 设置提示信息
+  function setMessage(msg) {
+    document.getElementById("message").innerText = msg;
+  }
+  
+  // 更新页面显示：双方 token 的状态
+  function updateBoard() {
+    // 更新人类区域
+    let p1Div = document.getElementById("p1-tokens");
+    p1Div.innerHTML = "";
+    currentState.p1.forEach((token, index) => {
+      let tokenDiv = document.createElement("div");
+      tokenDiv.className = "token";
+      tokenDiv.id = "p1_" + index;
+      if (token === null) {
+        tokenDiv.innerText = "已撤";
+        tokenDiv.classList.add("removed");
+      } else {
+        tokenDiv.innerText = token;
+        // 人类回合时添加点击事件
+        if (currentState.turn === 1) {
+          tokenDiv.addEventListener("click", function() {
+            onHumanTokenClick(index);
+          });
+        }
+      }
+      if (selectedTokenIndex === index) {
+        tokenDiv.classList.add("selected");
+      }
+      p1Div.appendChild(tokenDiv);
+    });
+  
+    // 更新 AI 区域
+    let p2Div = document.getElementById("p2-tokens");
+    p2Div.innerHTML = "";
+    currentState.p2.forEach((token, index) => {
+      let tokenDiv = document.createElement("div");
+      tokenDiv.className = "token";
+      tokenDiv.id = "p2_" + index;
+      if (token === null) {
+        tokenDiv.innerText = "已撤";
+        tokenDiv.classList.add("removed");
+      } else {
+        tokenDiv.innerText = token;
+        // 人类回合且己方 token 已选中时，对方 token 可点击完成移动
+        if (currentState.turn === 1 && selectedTokenIndex !== null) {
+          tokenDiv.addEventListener("click", function() {
+            onOpponentTokenClick(index);
+          });
+        }
+      }
+      p2Div.appendChild(tokenDiv);
+    });
+  }
+  
+  // 人类点击自己区域的 token：选择或取消选择
+  function onHumanTokenClick(index) {
+    if (currentState.turn !== 1) return;
+    if (currentState.p1[index] === null) return;
+    selectedTokenIndex = (selectedTokenIndex === index) ? null : index;
+    updateBoard();
+  }
+  
+  // 人类点击对手区域的 token：完成一次操作
+  function onOpponentTokenClick(oppIndex) {
+    if (currentState.turn !== 1) return;
+    if (selectedTokenIndex === null) {
+      setMessage("请先选择你自己的数字");
+      return;
+    }
+    if (currentState.p2[oppIndex] === null) return;
+    // 执行移动：当前玩家的 token 与对手的 token 相加
+    currentState = applyMove(currentState, { ownIndex: selectedTokenIndex, oppIndex: oppIndex });
+    selectedTokenIndex = null;
+    updateBoard();
+    checkGameStatus();
+    // 若游戏未结束且轮到 AI，则延时后 AI 行动
+    if (!isTerminal(currentState) && currentState.turn === 2) {
+      setMessage("AI 思考中...");
+      setTimeout(aiMove, 500);
+    }
+  }
+  
+  // 应用一次移动，返回新的状态
+  // 修改规则：如果和正好为10，则 token 撤去；否则始终取相加结果的个位数字
+  function applyMove(state, move) {
+    let newState = cloneState(state);
+    let current = newState.turn;
+    let opponent = (current === 1 ? 2 : 1);
+    let ownToken, oppToken;
+    if (current === 1) {
+      ownToken = newState.p1[move.ownIndex];
+      oppToken = newState.p2[move.oppIndex];
+    } else {
+      ownToken = newState.p2[move.ownIndex];
+      oppToken = newState.p1[move.oppIndex];
+    }
+    let sum = ownToken + oppToken;
+    if (sum === 10) {
+      sum = null;
+    } else {
+      sum = sum % 10;  // 始终只取个位数字
+    }
+    if (current === 1) {
+      newState.p1[move.ownIndex] = sum;
+    } else {
+      newState.p2[move.ownIndex] = sum;
+    }
+    newState.turn = opponent;
+    return newState;
+  }
+  
+  // 克隆状态对象
+  function cloneState(state) {
+    return {
+      p1: state.p1.slice(),
+      p2: state.p2.slice(),
+      turn: state.turn
+    };
+  }
+  
+  // 判断是否终局：当一方的两个 token 均撤去
+  function isTerminal(state) {
+    return (state.p1[0] === null && state.p1[1] === null) ||
+           (state.p2[0] === null && state.p2[1] === null);
+  }
+  
+  // 检查游戏结束，并在消息区显示结果
+  function checkGameStatus() {
+    if (currentState.p1[0] === null && currentState.p1[1] === null) {
+      setMessage("你胜利了！");
+    } else if (currentState.p2[0] === null && currentState.p2[1] === null) {
+      setMessage("AI胜利了！");
+    }
+  }
+  
+  // 返回当前玩家所有合法走法（走法格式为 { ownIndex, oppIndex }）
+  function getLegalMoves(state) {
+    let moves = [];
+    if (state.turn === 1) {
+      state.p1.forEach((token, i) => {
+        if (token !== null) {
+          state.p2.forEach((oppToken, j) => {
+            if (oppToken !== null) {
+              moves.push({ ownIndex: i, oppIndex: j });
+            }
+          });
+        }
+      });
+    } else {
+      state.p2.forEach((token, i) => {
+        if (token !== null) {
+          state.p1.forEach((oppToken, j) => {
+            if (oppToken !== null) {
+              moves.push({ ownIndex: i, oppIndex: j });
+            }
+          });
+        }
+      });
+    }
+    return moves;
+  }
+  
+  /********************************************************************
+   * AI 部分：采用 minimax 算法配合 α–β 剪枝进行搜索
+   ********************************************************************/
+  
+  // 评价函数：从 AI（玩家2）角度出发
+  //   - 终局时：若人类 token 全撤去，返回极大负分；若 AI token 全撤去，返回极大正分
+  //   - 非终局时：根据双方已撤去 token 数量及是否存在立即撤去机会进行评分
+  function evaluate(state) {
+    if (state.p1[0] === null && state.p1[1] === null) return -10000; // 人类胜利
+    if (state.p2[0] === null && state.p2[1] === null) return 10000;  // AI 胜利
+  
+    let score = 0;
+    // 以撤去 token 数量差异评分，每撤去一个 token奖励50分
+    let aiRemoved = 2 - state.p2.filter(x => x !== null).length;
+    let humanRemoved = 2 - state.p1.filter(x => x !== null).length;
+    score += (aiRemoved - humanRemoved) * 50;
+  
+    // 若某 token 与对手 token 相加刚好为 10，则存在一次立即撤去的机会
+    function immediateOpportunities(tokens, oppTokens) {
+      let count = 0;
+      tokens.forEach(token => {
+        if (token === null) return;
+        if (oppTokens.some(opp => opp !== null && token + opp === 10)) {
+          count++;
+        }
+      });
+      return count;
+    }
+    let aiOpportunities = immediateOpportunities(state.p2, state.p1);
+    let humanOpportunities = immediateOpportunities(state.p1, state.p2);
+    score += (aiOpportunities - humanOpportunities) * 20;
+  
+    return score;
+  }
+  
+  // minimax 搜索，返回形如 { score, move }
+  function minimax(state, depth, alpha, beta) {
+    if (depth === 0 || isTerminal(state)) {
+      return { score: evaluate(state), move: null };
+    }
+    let legalMoves = getLegalMoves(state);
+    let bestMove = null;
+    if (state.turn === 2) { // AI 回合，最大化分数
+      let maxEval = -Infinity;
+      for (let move of legalMoves) {
+        let nextState = applyMove(state, move);
+        let result = minimax(nextState, depth - 1, alpha, beta);
+        if (result.score > maxEval) {
+          maxEval = result.score;
+          bestMove = move;
+        }
+        alpha = Math.max(alpha, result.score);
+        if (beta <= alpha) break;
+      }
+      return { score: maxEval, move: bestMove };
+    } else { // 人类回合，最小化分数
+      let minEval = Infinity;
+      for (let move of legalMoves) {
+        let nextState = applyMove(state, move);
+        let result = minimax(nextState, depth - 1, alpha, beta);
+        if (result.score < minEval) {
+          minEval = result.score;
+          bestMove = move;
+        }
+        beta = Math.min(beta, result.score);
+        if (beta <= alpha) break;
+      }
+      return { score: minEval, move: bestMove };
+    }
+  }
+  
+  // AI 行动：调用 minimax 搜索最佳走法并执行
+  function aiMove() {
+    let result = minimax(currentState, aiSearchDepth, -Infinity, Infinity);
+    if (result.move) {
+      currentState = applyMove(currentState, result.move);
+      updateBoard();
+      checkGameStatus();
+      if (!isTerminal(currentState) && currentState.turn === 1) {
+        setMessage("你的回合");
+      }
+    } else {
+      setMessage("AI 无合法移动");
+    }
+  }
+  
+  // 监听 AI 搜索深度滑块
+  document.getElementById("depthSlider").addEventListener("input", function() {
+    aiSearchDepth = parseInt(this.value);
+    document.getElementById("depthValue").innerText = this.value;
+  });
+  
+  // 监听“重新开始”按钮
+  document.getElementById("restartBtn").addEventListener("click", function() {
+    newGame();
+  });
+  
+  // 开始游戏
+  newGame();
+  </script>
+</body>
+</html>
