@@ -1,0 +1,707 @@
+<!DOCTYPE html> 
+<html> 
+<head> 
+  <meta charset="UTF-8"> 
+  <title>犹太思维棋 AI —— 直接点击操作版</title> 
+  <style> 
+    body { font-family: Arial, sans-serif; } 
+    h1, h2 { text-align: center; } 
+    #controls { margin: 20px auto; max-width: 600px; } 
+    #controls label { display: block; margin: 5px 0; } 
+    #gameArea { text-align: center; margin-top:20px; } 
+    #message { margin: 10px; font-weight: bold; } 
+    #confirmBtn { margin-top: 10px; display: none; } 
+ 
+    /* 版本2：圆形小泡棋盘 */ 
+    .circular-board { 
+      position: relative; 
+      width: 400px; 
+      height: 400px; 
+      margin: 0 auto; 
+      border: 2px solid #000; 
+      border-radius: 50%; 
+    } 
+    .bubble { 
+      position: absolute; 
+      width: 40px; 
+      height: 40px; 
+      border-radius: 50%; 
+      background: lightblue; 
+      text-align: center; 
+      line-height: 40px; 
+      border: 1px solid #000; 
+      font-size: 12px; 
+      cursor: pointer; 
+      user-select: none; 
+    } 
+    /* 已经按过的小泡 */ 
+    .bubble.pressed { 
+      background: gray; 
+      color: #fff; 
+      cursor: default; 
+    } 
+    /* 被选中待操作的小泡 */ 
+    .bubble.selected { 
+      border: 3px solid red; 
+    } 
+     
+    /* 版本1：棋盘（表格形式） */ 
+    .grid-board { 
+      border-collapse: collapse; 
+      margin: 0 auto; 
+    } 
+    .grid-board td { 
+      width: 50px; 
+      height: 50px; 
+      border: 1px solid #000; 
+      text-align: center; 
+      vertical-align: middle; 
+    } 
+    .cell-piece { 
+      width: 30px; 
+      height: 30px; 
+      background: lightgreen; 
+      border-radius: 50%; 
+      margin: auto; 
+      cursor: pointer; 
+      user-select: none; 
+    } 
+    .cell-piece.selected { 
+      border: 3px solid red; 
+    } 
+  </style> 
+</head> 
+<body> 
+  <h1>犹太思维棋 AI —— 直接点击操作版</h1> 
+  <div id="rules" style="max-width:600px; margin:0 auto;"> 
+    <h2>游戏规则</h2> 
+    <p><strong>参与人数：</strong>游戏为两人对战，轮流操作。</p> 
+    <p><strong>棋盘与棋子：</strong></p> 
+    <ul> 
+      <li>版本1：棋盘为横平竖直排列的多行棋子（类似矩阵），初始数量不固定。</li> 
+      <li>版本2：棋盘为圆形，带有多个突出的小泡（类似按钮），数量为16。</li> 
+    </ul> 
+    <p><strong>操作方式：</strong></p> 
+    <ul> 
+      <li>取子规则（版本1）：每回合玩家可选择一条直线（行或列），移除该线上连续的1–3颗棋子。</li> 
+      <li>按泡规则（版本2）：每回合玩家按下1–3个连续的小泡，按下后这些小泡被视为“已操作”。</li> 
+    </ul> 
+    <p><strong>胜负条件：</strong>被迫操作最后一个棋子／小泡的一方判负。</p> 
+  </div> 
+ 
+  <div id="controls"> 
+    <label> 
+      游戏模式: 
+      <select id="gameMode"> 
+        <option value="v2">版本2：小泡模式</option> 
+        <option value="v1">版本1：棋盘模式</option> 
+      </select> 
+    </label> 
+    <label> 
+      AI 搜索深度: 
+      <input type="number" id="aiDepth" value="6" min="1" max="20"> 
+    </label> 
+    <label> 
+      先后手: 
+      <input type="radio" name="firstMove" value="human" checked> 人类先手 
+      <input type="radio" name="firstMove" value="ai"> AI 先手 
+    </label> 
+    <button id="startBtn">开始新游戏</button> 
+  </div> 
+ 
+  <div id="gameArea"> 
+    <div id="board"></div> 
+    <button id="confirmBtn">确认操作</button> 
+    <div id="message"></div> 
+  </div> 
+ 
+  <script> 
+    (function(){ 
+      // 全局变量 
+      let gameMode = 'v2';  // 'v2'：小泡模式，'v1'：棋盘模式 
+      let aiDepth = 6; 
+      let currentPlayer = 'human'; // "human" 或 "ai" 
+      let gameActive = false; 
+      let boardState; // 版本2: 数组长度16 (false：未操作, true：已操作) 
+                      // 版本1: 二维数组 (true：棋子存在, false：已取走) 
+      let rows = 5, cols = 5; // 版本1默认棋盘行列数 
+      const totalBubbles = 16; // 版本2小泡总数 
+ 
+      // 当前玩家待选的操作（针对人类操作的临时选择） 
+      // 版本2：存储选中的小泡下标（按序添加，要求连续） 
+      // 版本1：存储选中的单元格对象 {r, c} 
+      let humanSelection = []; 
+ 
+      // 工具函数：复制数组（浅拷贝） 
+      function copyArray(arr) { return arr.slice(); } 
+      // 复制二维数组 
+      function copy2DArray(arr) { return arr.map(row => row.slice()); } 
+ 
+      // 初始化游戏状态（根据游戏模式） 
+      function initGame() { 
+        gameMode = document.getElementById('gameMode').value; 
+        aiDepth = parseInt(document.getElementById('aiDepth').value) || 6; 
+        const firstMove = document.querySelector('input[name="firstMove"]:checked').value; 
+        currentPlayer = (firstMove === 'human') ? 'human' : 'ai'; 
+        gameActive = true; 
+        humanSelection = []; 
+        if(gameMode === 'v2'){ 
+          // 版本2：小泡模式，初始状态全未操作（false） 
+          boardState = new Array(totalBubbles).fill(false); 
+        } else { 
+          // 版本1：棋盘模式，初始状态所有棋子存在（true） 
+          boardState = []; 
+          for(let i = 0; i < rows; i++){ 
+            let row = []; 
+            for(let j = 0; j < cols; j++){ 
+              row.push(true); 
+            } 
+            boardState.push(row); 
+          } 
+        } 
+        renderBoard(); 
+        setMessage(currentPlayer === 'human' ? "你的回合" : "AI 思考中..."); 
+        if(currentPlayer === 'human'){ 
+          attachHumanListeners(); 
+        } else { 
+          setTimeout(aiMove, 500); 
+        } 
+      } 
+ 
+      // 设置提示信息 
+      function setMessage(msg) { 
+        document.getElementById('message').innerText = msg; 
+      } 
+ 
+      // 渲染棋盘（根据当前 gameMode） 
+      function renderBoard() { 
+        const boardDiv = document.getElementById('board'); 
+        boardDiv.innerHTML = ""; 
+        // 每次重绘时隐藏确认按钮，并清空当前人类选择 
+        humanSelection = []; 
+        updateConfirmButtonVisibility(); 
+        if(gameMode === 'v2'){ 
+          // 版本2：小泡模式——圆形布局 
+          boardDiv.className = "circular-board"; 
+          const radius = 180; 
+          const centerX = 200, centerY = 200; 
+          for(let i = 0; i < totalBubbles; i++){ 
+            const angle = (2 * Math.PI / totalBubbles) * i; 
+            const x = centerX + radius * Math.cos(angle) - 20; 
+            const y = centerY + radius * Math.sin(angle) - 20; 
+            const bubble = document.createElement('div'); 
+            bubble.className = "bubble" + (boardState[i] ? " pressed" : ""); 
+            bubble.style.left = x + "px"; 
+            bubble.style.top = y + "px"; 
+            bubble.innerText = i; 
+            bubble.dataset.index = i;  // 标记小泡下标 
+            boardDiv.appendChild(bubble); 
+          } 
+        } else { 
+          // 版本1：棋盘模式——表格布局 
+          boardDiv.className = ""; 
+          const table = document.createElement('table'); 
+          table.className = "grid-board"; 
+          for(let i = 0; i < rows; i++){ 
+            const tr = document.createElement('tr'); 
+            for(let j = 0; j < cols; j++){ 
+              const td = document.createElement('td'); 
+              if(boardState[i][j]){ 
+                const piece = document.createElement('div'); 
+                piece.className = "cell-piece"; 
+                piece.dataset.row = i; 
+                piece.dataset.col = j; 
+                td.appendChild(piece); 
+              } 
+              tr.appendChild(td); 
+            } 
+            table.appendChild(tr); 
+          } 
+          boardDiv.appendChild(table); 
+        } 
+      } 
+ 
+      // 根据 gameMode 分别为人类回合绑定点击事件 
+      function attachHumanListeners() { 
+        if(currentPlayer !== 'human') return; 
+        if(gameMode === 'v2'){ 
+          attachHumanListenersV2(); 
+        } else { 
+          attachHumanListenersV1(); 
+        } 
+      } 
+ 
+      //////////////////////////////// 
+      // 版本2（小泡模式）相关函数 
+      //////////////////////////////// 
+      function attachHumanListenersV2() { 
+        const bubbles = document.querySelectorAll('.bubble'); 
+        bubbles.forEach(bubble => { 
+          // 仅对未操作的小泡绑定点击事件 
+          if(!bubble.classList.contains('pressed')){ 
+            bubble.addEventListener('click', onBubbleClick); 
+          } 
+        }); 
+      } 
+      function onBubbleClick(e) { 
+        const idx = parseInt(e.target.dataset.index); 
+        selectBubbleV2(idx); 
+      } 
+      // 选择小泡：要求连续（只能在当前选择两端扩展，最多 3 个） 
+      function selectBubbleV2(idx) { 
+        if(humanSelection.length === 0) { 
+          humanSelection.push(idx); 
+        } else { 
+          // 如果点击的已在选择中，则若位于两端则撤销 
+          if(humanSelection.includes(idx)) { 
+            if(idx === humanSelection[0]) { 
+              humanSelection.shift(); 
+            } else if(idx === humanSelection[humanSelection.length - 1]) { 
+              humanSelection.pop(); 
+            } 
+          } else { 
+            // 检查是否与当前选中区连续（考虑环形：相邻关系为：(first-1+N)%N 与 (last+1)%N） 
+            const first = humanSelection[0]; 
+            const last = humanSelection[humanSelection.length - 1]; 
+            const prev = (first - 1 + totalBubbles) % totalBubbles; 
+            const next = (last + 1) % totalBubbles; 
+            if(idx === prev) { 
+              if(humanSelection.length < 3) { 
+                humanSelection.unshift(idx); 
+              } 
+            } else if(idx === next) { 
+              if(humanSelection.length < 3) { 
+                humanSelection.push(idx); 
+              } 
+            } else { 
+              // 若不连续，则重新开始选择 
+              humanSelection = [idx]; 
+            } 
+          } 
+        } 
+        updateSelectionDisplayV2(); 
+        updateConfirmButtonVisibility(); 
+      } 
+      // 更新版本2棋盘上选中小泡的显示效果 
+      function updateSelectionDisplayV2() { 
+        const bubbles = document.querySelectorAll('.bubble'); 
+        bubbles.forEach(bubble => { 
+          const idx = parseInt(bubble.dataset.index); 
+          if(humanSelection.includes(idx)) { 
+            bubble.classList.add("selected"); 
+          } else { 
+            bubble.classList.remove("selected"); 
+          } 
+        }); 
+      } 
+      // 执行版本2操作：将选中小泡标记为已操作（true） 
+      function applyMoveV2(state, move) { 
+        let newState = copyArray(state); 
+        move.forEach(idx => { newState[idx] = true; }); 
+        return newState; 
+      } 
+      // 判断版本2是否结束：所有小泡均已操作 
+      function isTerminalV2(state) { return state.every(val => val); } 
+ 
+      //////////////////////////////// 
+      // 版本1（棋盘模式）相关函数 
+      //////////////////////////////// 
+      function attachHumanListenersV1() { 
+        const pieces = document.querySelectorAll('.cell-piece'); 
+        pieces.forEach(piece => { 
+          piece.addEventListener('click', onPieceClick); 
+        }); 
+      } 
+      function onPieceClick(e) { 
+        // 防止点击内部元素（例如选中边框）造成干扰 
+        const target = e.currentTarget; 
+        const r = parseInt(target.dataset.row); 
+        const c = parseInt(target.dataset.col); 
+        selectPieceV1({r: r, c: c}); 
+      } 
+      // 选择棋子：要求在同一行或同一列连续（最多3个） 
+      function selectPieceV1(cell) { 
+        if(humanSelection.length === 0) { 
+          humanSelection.push(cell); 
+        } else { 
+          // 判断是否已在选择中 
+          if(humanSelection.some(item => item.r === cell.r && item.c === cell.c)) { 
+            // 若点击选择的首或尾，则撤销该端 
+            const first = humanSelection[0]; 
+            const last = humanSelection[humanSelection.length - 1]; 
+            if(first.r === cell.r && first.c === cell.c) { 
+              humanSelection.shift(); 
+            } else if(last.r === cell.r && last.c === cell.c) { 
+              humanSelection.pop(); 
+            } 
+          } else { 
+            // 新点击的棋子必须与当前选择在同一行或同一列 
+            const sameRow = humanSelection.every(item => item.r === cell.r); 
+            const sameCol = humanSelection.every(item => item.c === cell.c); 
+            if(sameRow) { 
+              const cols = humanSelection.map(item => item.c); 
+              const min = Math.min(...cols), max = Math.max(...cols); 
+              if(cell.c === min - 1) { 
+                if(humanSelection.length < 3) humanSelection.unshift(cell); 
+              } else if(cell.c === max + 1) { 
+                if(humanSelection.length < 3) humanSelection.push(cell); 
+              } else { 
+                // 不连续，则重新开始选择 
+                humanSelection = [cell]; 
+              } 
+            } else if(sameCol) { 
+              const rowsArr = humanSelection.map(item => item.r); 
+              const min = Math.min(...rowsArr), max = Math.max(...rowsArr); 
+              if(cell.r === min - 1) { 
+                if(humanSelection.length < 3) humanSelection.unshift(cell); 
+              } else if(cell.r === max + 1) { 
+                if(humanSelection.length < 3) humanSelection.push(cell); 
+              } else { 
+                humanSelection = [cell]; 
+              } 
+            } else { 
+              // 若不在同一行也不在同一列，则重新开始选择 
+              humanSelection = [cell]; 
+            } 
+          } 
+        } 
+        updateSelectionDisplayV1(); 
+        updateConfirmButtonVisibility(); 
+      } 
+      // 更新版本1棋盘上选中棋子的显示效果 
+      function updateSelectionDisplayV1() { 
+        const pieces = document.querySelectorAll('.cell-piece'); 
+        pieces.forEach(piece => { 
+          const r = parseInt(piece.dataset.row); 
+          const c = parseInt(piece.dataset.col); 
+          const inSelection = humanSelection.some(item => item.r === r && item.c === c); 
+          if(inSelection) { 
+            piece.classList.add("selected"); 
+          } else { 
+            piece.classList.remove("selected"); 
+          } 
+        }); 
+      } 
+      // 执行版本1操作：根据所选棋子构造操作对象，并移除对应棋子 
+      // 操作对象格式： { type:"row" 或 "col", index, start, count } 
+      function applyMoveV1(state, move) { 
+        let newState = copy2DArray(state); 
+        if(move.type === "row"){ 
+          for(let j = move.start; j < move.start + move.count; j++){ 
+            newState[move.index][j] = false; 
+          } 
+        } else { 
+          for(let i = move.start; i < move.start + move.count; i++){ 
+            newState[i][move.index] = false; 
+          } 
+        } 
+        return newState; 
+      } 
+      // 判断版本1是否结束：所有棋子均已取走 
+      function isTerminalV1(state) { 
+        for(let i=0; i<state.length; i++){ 
+          for(let j=0; j<state[0].length; j++){ 
+            if(state[i][j]) return false; 
+          } 
+        } 
+        return true; 
+      } 
+ 
+      // 更新确认按钮的显示：当有有效选择时显示 
+      function updateConfirmButtonVisibility() { 
+        const btn = document.getElementById('confirmBtn'); 
+        if(humanSelection.length > 0 && currentPlayer === 'human'){ 
+          btn.style.display = "inline-block"; 
+        } else { 
+          btn.style.display = "none"; 
+        } 
+      } 
+ 
+      // 人类点击“确认操作”后，提交选择 
+      function confirmHumanMove() { 
+        if(!gameActive || currentPlayer !== 'human') return; 
+        if(gameMode === 'v2'){ 
+          // 版本2：直接将 humanSelection（选中的小泡下标数组）作为操作 
+          let newState = applyMoveV2(boardState, humanSelection); 
+          if(isTerminalV2(newState)){ 
+            boardState = newState; 
+            renderBoard(); 
+            setMessage("你按下了最后一个小泡，你输掉了！"); 
+            gameActive = false; 
+            return; 
+          } 
+          boardState = newState; 
+        } else { 
+          // 版本1：检查所选棋子是否在同一行或同一列 
+          if(!(humanSelection.every(item => item.r === humanSelection[0].r) || 
+               humanSelection.every(item => item.c === humanSelection[0].c))) { 
+            alert("请选择同一行或同一列连续的棋子！"); 
+            return; 
+          } 
+          // 构造操作对象 
+          if(humanSelection.every(item => item.r === humanSelection[0].r)){ 
+            // 横向操作 
+            const row = humanSelection[0].r; 
+            const cols = humanSelection.map(item => item.c); 
+            const start = Math.min(...cols); 
+            const count = humanSelection.length; 
+            var move = { type: "row", index: row, start: start, count: count }; 
+          } else { 
+            // 纵向操作 
+            const col = humanSelection[0].c; 
+            const rowsArr = humanSelection.map(item => item.r); 
+            const start = Math.min(...rowsArr); 
+            const count = humanSelection.length; 
+            var move = { type: "col", index: col, start: start, count: count }; 
+          } 
+          let newState = applyMoveV1(boardState, move); 
+          if(isTerminalV1(newState)){ 
+            boardState = newState; 
+            renderBoard(); 
+            setMessage("你取走了最后一个棋子，你输掉了！"); 
+            gameActive = false; 
+            return; 
+          } 
+          boardState = newState; 
+        } 
+        renderBoard(); 
+        currentPlayer = 'ai'; 
+        setMessage("AI 思考中..."); 
+        setTimeout(aiMove, 500); 
+      } 
+ 
+      // 为“确认操作”按钮绑定事件 
+      document.getElementById('confirmBtn').addEventListener('click', confirmHumanMove); 
+ 
+      //////////////////////////////// 
+      // AI – Minimax 搜索（版本2） 
+      //////////////////////////////// 
+      function minimaxV2(state, depth, isMaximizing, alpha, beta) { 
+        let validMoves = getValidMovesV2(state); 
+        if(depth === 0 || validMoves.length === 0) { 
+          return { score: 0, move: null }; 
+        } 
+        let bestMove = null; 
+        if(isMaximizing) { 
+          let maxEval = -Infinity; 
+          for(let move of validMoves) { 
+            let newState = applyMoveV2(state, move); 
+            if(isTerminalV2(newState)) { 
+              var evalScore = -1; 
+            } else { 
+              let result = minimaxV2(newState, depth-1, false, alpha, beta); 
+              var evalScore = result.score; 
+            } 
+            if(evalScore > maxEval) { maxEval = evalScore; bestMove = move; } 
+            alpha = Math.max(alpha, evalScore); 
+            if(beta <= alpha) break; 
+          } 
+          return { score: maxEval, move: bestMove }; 
+        } else { 
+          let minEval = Infinity; 
+          for(let move of validMoves) { 
+            let newState = applyMoveV2(state, move); 
+            if(isTerminalV2(newState)) { 
+              var evalScore = 1; 
+            } else { 
+              let result = minimaxV2(newState, depth-1, true, alpha, beta); 
+              var evalScore = result.score; 
+            } 
+            if(evalScore < minEval) { minEval = evalScore; bestMove = move; } 
+            beta = Math.min(beta, evalScore); 
+            if(beta <= alpha) break; 
+          } 
+          return { score: minEval, move: bestMove }; 
+        } 
+      } 
+      // 获取版本2当前状态下所有合法操作（连续的1–3个未按小泡） 
+      function getValidMovesV2(state) { 
+        let moves = []; 
+        const n = state.length; 
+        let segments = []; 
+        let visited = new Array(n).fill(false); 
+        for(let i=0; i<n; i++){ 
+          if(!state[i] && !visited[i]){ 
+            let seg = []; 
+            let j = i; 
+            do { 
+              if(state[j]) break; 
+              seg.push(j); 
+              visited[j] = true; 
+              j = (j+1) % n; 
+            } while(j !== i); 
+            segments.push({indices: seg, circular: false}); 
+          } 
+        } 
+        if(segments.length === 1 && state[0]===false && state[n-1]===false){ 
+          segments[0].circular = true; 
+        } 
+        segments.forEach(segObj => { 
+          let seg = segObj.indices; 
+          let isCircular = segObj.circular; 
+          if(!isCircular){ 
+            for(let i=0; i<seg.length; i++){ 
+              for(let len=1; len<=3 && i+len<=seg.length; len++){ 
+                moves.push(seg.slice(i, i+len)); 
+              } 
+            } 
+          } else { 
+            let extended = seg.concat(seg); 
+            for(let i=0; i<seg.length; i++){ 
+              for(let len=1; len<=3 && len<=seg.length; len++){ 
+                moves.push(extended.slice(i, i+len)); 
+              } 
+            } 
+            moves = deduplicateMoves(moves); 
+          } 
+        }); 
+        return moves; 
+      } 
+      function deduplicateMoves(moves) { 
+        let unique = []; 
+        let seen = {}; 
+        moves.forEach(move => { 
+          let sorted = move.slice().sort((a,b)=>a-b); 
+          let key = sorted.join(','); 
+          if(!seen[key]){ 
+            seen[key] = true; 
+            unique.push(sorted); 
+          } 
+        }); 
+        return unique; 
+      } 
+ 
+      //////////////////////////////// 
+      // AI – Minimax 搜索（版本1） 
+      //////////////////////////////// 
+      function minimaxV1(state, depth, isMaximizing, alpha, beta) { 
+        let validMoves = getValidMovesV1(state); 
+        if(depth === 0 || validMoves.length === 0) { 
+          return { score: 0, move: null }; 
+        } 
+        let bestMove = null; 
+        if(isMaximizing) { 
+          let maxEval = -Infinity; 
+          for(let move of validMoves) { 
+            let newState = applyMoveV1(state, move); 
+            if(isTerminalV1(newState)) { 
+              var evalScore = -1; 
+            } else { 
+              let result = minimaxV1(newState, depth-1, false, alpha, beta); 
+              var evalScore = result.score; 
+            } 
+            if(evalScore > maxEval) { maxEval = evalScore; bestMove = move; } 
+            alpha = Math.max(alpha, evalScore); 
+            if(beta <= alpha) break; 
+          } 
+          return { score: maxEval, move: bestMove }; 
+        } else { 
+          let minEval = Infinity; 
+          for(let move of validMoves) { 
+            let newState = applyMoveV1(state, move); 
+            if(isTerminalV1(newState)) { 
+              var evalScore = 1; 
+            } else { 
+              let result = minimaxV1(newState, depth-1, true, alpha, beta); 
+              var evalScore = result.score; 
+            } 
+            if(evalScore < minEval) { minEval = evalScore; bestMove = move; } 
+            beta = Math.min(beta, evalScore); 
+            if(beta <= alpha) break; 
+          } 
+          return { score: minEval, move: bestMove }; 
+        } 
+      } 
+      // 获取版本1当前状态下所有合法操作（横向或纵向1–3个连续棋子） 
+      function getValidMovesV1(state) { 
+        let moves = []; 
+        // 遍历行 
+        for(let i=0; i<state.length; i++){ 
+          let row = state[i]; 
+          let j = 0; 
+          while(j < row.length){ 
+            if(row[j]){ 
+              let start = j; 
+              while(j < row.length && row[j]) { j++; } 
+              for(let k = start; k < j; k++){ 
+                for(let count = 1; count <= 3 && k+count <= j; count++){ 
+                  moves.push({ type: "row", index: i, start: k, count: count }); 
+                } 
+              } 
+            } else { 
+              j++; 
+            } 
+          } 
+        } 
+        // 遍历列 
+        for(let j=0; j<state[0].length; j++){ 
+          let i = 0; 
+          while(i < state.length){ 
+            if(state[i][j]){ 
+              let start = i; 
+              while(i < state.length && state[i][j]) { i++; } 
+              for(let k = start; k < i; k++){ 
+                for(let count = 1; count <= 3 && k+count <= i; count++){ 
+                  moves.push({ type: "col", index: j, start: k, count: count }); 
+                } 
+              } 
+            } else { 
+              i++; 
+            } 
+          } 
+        } 
+        return moves; 
+      } 
+ 
+      // AI操作：根据当前 gameMode 调用对应的 minimax 搜索选择最佳操作 
+      function aiMove() { 
+        if(!gameActive || currentPlayer !== 'ai') return; 
+        let bestMove, evalObj; 
+        if(gameMode === 'v2'){ 
+          evalObj = minimaxV2(boardState, aiDepth, true, -Infinity, Infinity); 
+          bestMove = evalObj.move; 
+        } else { 
+          evalObj = minimaxV1(boardState, aiDepth, true, -Infinity, Infinity); 
+          bestMove = evalObj.move; 
+        } 
+        if(!bestMove){ 
+          setMessage("AI 无可行操作，AI 输了！"); 
+          gameActive = false; 
+          return; 
+        } 
+        let newState; 
+        if(gameMode === 'v2'){ 
+          newState = applyMoveV2(boardState, bestMove); 
+          if(isTerminalV2(newState)){ 
+            boardState = newState; 
+            renderBoard(); 
+            setMessage("AI 按下最后一个小泡，AI 输了！"); 
+            gameActive = false; 
+            return; 
+          } 
+          boardState = newState; 
+        } else { 
+          newState = applyMoveV1(boardState, bestMove); 
+          if(isTerminalV1(newState)){ 
+            boardState = newState; 
+            renderBoard(); 
+            setMessage("AI 取走最后一个棋子，AI 输了！"); 
+            gameActive = false; 
+            return; 
+          } 
+          boardState = newState; 
+        } 
+        renderBoard(); 
+        currentPlayer = 'human'; 
+        setMessage("你的回合"); 
+        attachHumanListeners(); 
+      } 
+ 
+      // “开始新游戏”按钮绑定事件 
+      document.getElementById('startBtn').addEventListener('click', function(){ 
+        initGame(); 
+      }); 
+    })(); 
+  </script> 
+</body> 
+</html>
