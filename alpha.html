@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <!-- 移动端适配 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alpha 1+1</title>
+  <style>
+    body {
+      font-family: 'Courier New', serif;
+      background-color: #f7f7f7;
+      margin: 0;
+      padding: 20px;
+      overflow-x: hidden; /* 防止横向滚动 */
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border-bottom: 1px solid #eee;
+      margin-bottom: 20px;
+    }
+    .header-icon {
+      width: 16px;
+      height: 16px;
+      background-color: #e07a5f;
+      border-radius: 50%;
+    }
+    .header-title {
+      font-size: 16px;
+      color: #2d3436;
+      font-weight: 500;
+    }
+    .model-dropdown {
+      position: relative;
+      display: inline-block;
+      margin-left: 20px;
+    }
+    .model-button {
+      padding: 6px 12px;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .model-button:hover {
+      background-color: #f8f9fa;
+    }
+    .model-options {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      width: 200px;
+      display: none;
+      z-index: 1000;
+      margin-top: 4px;
+    }
+    .model-options.show {
+      display: block;
+    }
+    .model-option {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    .model-option:hover {
+      background-color: #f8f9fa;
+    }
+    .model-option.selected {
+      background-color: #fdf2f0;
+    }
+    .beta-badge {
+      background-color: #3b82f6;
+      color: white;
+      padding: 2px 6px;
+      border-radius: 10px;
+      font-size: 12px;
+    }
+    .dropdown-arrow {
+      border: solid #666;
+      border-width: 0 2px 2px 0;
+      display: inline-block;
+      padding: 3px;
+      transform: rotate(45deg);
+      margin-top: -2px;
+    }
+    .game-container {
+      max-width: 100%;
+      margin: 20px auto;
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      overflow: auto;
+    }
+    .turn-selector {
+      display: flex;
+      justify-content: center;
+      margin: 20px 0;
+    }
+    .turn-button {
+      padding: 10px 20px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      cursor: pointer;
+      margin: 0 10px;
+      transition: background-color 0.3s ease;
+    }
+    .turn-button:hover {
+      background-color: #f8f9fa;
+    }
+    .turn-button.selected {
+      background-color: #e07a5f;
+      color: white;
+    }
+    .depth-slider {
+      width: 100%;
+      margin: 20px 0;
+    }
+    .numbers {
+      display: flex;
+      gap: 20px;
+      margin: 20px 0;
+      flex-wrap: wrap;
+    }
+    .number {
+      width: 60px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid #e07a5f;
+      border-radius: 12px;
+      font-size: 24px;
+      cursor: pointer;
+      transition: transform 0.3s ease;
+      background: white;
+    }
+    .number.selected {
+      background-color: #e07a5f;
+      color: white;
+      transform: translateY(-5px);
+    }
+    .number.disabled {
+      background-color: #f5f5f5;
+      border-color: #ddd;
+      cursor: not-allowed;
+    }
+    .status {
+      text-align: center;
+      font-size: 18px;
+      margin: 20px 0;
+      color: #2d3436;
+    }
+    input[type="range"] {
+      width: 100%;
+      height: 6px;
+      background: #e0e0e0;
+      border-radius: 3px;
+      outline: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 20px;
+      height: 20px;
+      background: #e07a5f;
+      border-radius: 50%;
+      cursor: pointer;
+    }
+    .depth-control {
+      margin: 20px 0;
+    }
+    .depth-control p {
+      margin: 8px 0;
+      color: #666;
+    }
+    /* 移动端适配 */
+    @media (max-width: 600px) {
+      body {
+        padding: 10px;
+      }
+      .header {
+        padding: 6px 10px;
+        gap: 4px;
+      }
+      .header-title {
+        font-size: 14px;
+      }
+      .model-button {
+        padding: 4px 8px;
+        font-size: 12px;
+      }
+      .game-container {
+        padding: 10px;
+      }
+      .turn-button {
+        padding: 8px 16px;
+        margin: 0 5px;
+        font-size: 14px;
+      }
+      .number {
+        width: 50px;
+        height: 50px;
+        font-size: 20px;
+      }
+      .depth-control p,
+      .status {
+        font-size: 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-icon"></div>
+    <div class="header-title">Alpha 1+1</div>
+    <div class="model-dropdown">
+      <button class="model-button" onclick="toggleModelDropdown()">
+        Alpha 1+1
+        <span class="dropdown-arrow"></span>
+      </button>
+      <div class="model-options" id="modelOptions">
+        <div class="model-option selected">
+          <span>Alpha 1+1</span>
+          <span class="beta-badge">Beta</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="game-container">
+    <div class="turn-selector">
+      <button class="turn-button" id="firstTurn">先手</button>
+      <button class="turn-button" id="secondTurn">后手</button>
+      <button class="turn-button" id="restartButton">重新开始</button>
+    </div>
+    <div class="status" id="status">轮到你的回合</div>
+    <div class="depth-control">
+      <p>AI 深度: <span id="depth-value">12</span></p>
+      <input type="range" id="depth" min="1" max="25" value="12" class="depth-slider">
+    </div>
+    <div>
+      <h3>你的数字:</h3>
+      <div class="numbers" id="player-numbers">
+        <div class="number" data-index="0">1</div>
+        <div class="number" data-index="1">1</div>
+      </div>
+      <h3>AI的数字:</h3>
+      <div class="numbers" id="ai-numbers">
+        <div class="number" data-index="0">1</div>
+        <div class="number" data-index="1">1</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 模型下拉菜单控制
+    function toggleModelDropdown() {
+      const options = document.getElementById('modelOptions');
+      options.classList.toggle('show');
+    }
+    // 点击其他地方关闭下拉菜单
+    window.onclick = function(event) {
+      if (!event.target.matches('.model-button')) {
+        const dropdowns = document.getElementsByClassName('model-options');
+        for (let dropdown of dropdowns) {
+          if (dropdown.classList.contains('show')) {
+            dropdown.classList.remove('show');
+          }
+        }
+      }
+    }
+
+    class Game {
+      constructor() {
+        // 默认先手为玩家，可在 turn-selector 中修改
+        this.startingTurn = true;
+        this.isPlayerTurn = this.startingTurn;
+        this.reset();
+        this.selectedPlayerNumber = null;
+        this.selectedAiNumber = null;
+        this.setupEventListeners();
+        this.setupTurnSelection();
+        this.setupRestartButton();
+      }
+
+      reset() {
+        this.playerNumbers = [1, 1];
+        this.aiNumbers = [1, 1];
+        // 保留 turn-selector 的选择，不重置 isPlayerTurn
+        this.selectedPlayerNumber = null;
+        this.selectedAiNumber = null;
+        this.updateUI();
+        document.getElementById('status').textContent =
+          this.isPlayerTurn ? '轮到你的回合' : 'AI正在思考...';
+      }
+
+      setupEventListeners() {
+        document.getElementById('player-numbers').addEventListener('click', (e) => {
+          if (!this.isPlayerTurn) return;
+          if (e.target.classList.contains('number') && !e.target.classList.contains('disabled')) {
+            const index = parseInt(e.target.dataset.index);
+            this.selectPlayerNumber(index);
+          }
+        });
+
+        document.getElementById('ai-numbers').addEventListener('click', (e) => {
+          if (!this.isPlayerTurn) return;
+          if (e.target.classList.contains('number') && !e.target.classList.contains('disabled')) {
+            const index = parseInt(e.target.dataset.index);
+            this.selectAiNumber(index);
+          }
+        });
+      }
+
+      setupTurnSelection() {
+        const firstTurnButton = document.getElementById('firstTurn');
+        const secondTurnButton = document.getElementById('secondTurn');
+
+        firstTurnButton.addEventListener('click', () => {
+          this.startingTurn = true;
+          this.isPlayerTurn = true;
+          this.updateTurnSelection(firstTurnButton, secondTurnButton);
+          this.reset();
+        });
+
+        secondTurnButton.addEventListener('click', () => {
+          this.startingTurn = false;
+          this.isPlayerTurn = false;
+          this.updateTurnSelection(secondTurnButton, firstTurnButton);
+          this.reset();
+          // AI先手时立即行动
+          setTimeout(() => this.makeAiMove(), 500);
+        });
+      }
+
+      setupRestartButton() {
+        const restartButton = document.getElementById('restartButton');
+        restartButton.addEventListener('click', () => this.reset());
+      }
+
+      updateTurnSelection(selectedButton, unselectedButton) {
+        selectedButton.classList.add('selected');
+        unselectedButton.classList.remove('selected');
+      }
+
+      selectPlayerNumber(index) {
+        if (this.playerNumbers[index] === null) return;
+        const playerNumElements = document.querySelectorAll('#player-numbers .number');
+        playerNumElements.forEach(el => {
+          el.classList.remove('selected');
+          el.style.transform = 'translateY(0)';
+        });
+        playerNumElements[index].classList.add('selected');
+        playerNumElements[index].style.transform = 'translateY(-5px)';
+        this.selectedPlayerNumber = index;
+        if (this.selectedAiNumber !== null) {
+          this.makePlayerMove();
+        }
+      }
+
+      selectAiNumber(index) {
+        if (this.aiNumbers[index] === null) return;
+        const aiNumElements = document.querySelectorAll('#ai-numbers .number');
+        aiNumElements.forEach(el => {
+          el.classList.remove('selected');
+          el.style.transform = 'translateY(0)';
+        });
+        aiNumElements[index].classList.add('selected');
+        aiNumElements[index].style.transform = 'translateY(-5px)';
+        this.selectedAiNumber = index;
+        if (this.selectedPlayerNumber !== null) {
+          this.makePlayerMove();
+        }
+      }
+
+      makePlayerMove() {
+        let x = this.playerNumbers[this.selectedPlayerNumber];
+        let d = this.aiNumbers[this.selectedAiNumber];
+        let sum = x + d;
+        let newNum = sum % 10;
+        this.playerNumbers[this.selectedPlayerNumber] = (newNum === 0 ? null : newNum);
+        this.selectedPlayerNumber = null;
+        this.selectedAiNumber = null;
+        this.isPlayerTurn = false;
+        this.updateUI();
+        if (!this.checkWin()) {
+          setTimeout(() => this.makeAiMove(), 1000);
+        }
+      }
+
+      // ===== AI 极小极大搜索及评估函数 =====
+
+      cloneState(state) {
+        return {
+          player: state.player.slice(),
+          ai: state.ai.slice(),
+          turn: state.turn
+        };
+      }
+
+      getPossibleMoves(state) {
+        let moves = [];
+        if (state.turn === "ai") {
+          for (let i = 0; i < 2; i++) {
+            if (state.ai[i] !== null) {
+              for (let j = 0; j < 2; j++) {
+                if (state.player[j] !== null) {
+                  moves.push({ mover: "ai", ownIndex: i, oppIndex: j });
+                }
+              }
+            }
+          }
+        } else {
+          for (let i = 0; i < 2; i++) {
+            if (state.player[i] !== null) {
+              for (let j = 0; j < 2; j++) {
+                if (state.ai[j] !== null) {
+                  moves.push({ mover: "player", ownIndex: i, oppIndex: j });
+                }
+              }
+            }
+          }
+        }
+        return moves;
+      }
+
+      doMove(state, move) {
+        let newState = this.cloneState(state);
+        if (move.mover === "ai") {
+          let x = newState.ai[move.ownIndex];
+          let d = newState.player[move.oppIndex];
+          let sum = x + d;
+          let newNum = sum % 10;
+          newState.ai[move.ownIndex] = (newNum === 0 ? null : newNum);
+        } else {
+          let x = newState.player[move.ownIndex];
+          let d = newState.ai[move.oppIndex];
+          let sum = x + d;
+          let newNum = sum % 10;
+          newState.player[move.ownIndex] = (newNum === 0 ? null : newNum);
+        }
+        newState.turn = (state.turn === "ai" ? "player" : "ai");
+        return newState;
+      }
+
+      isTerminal(state) {
+        const playerCount = state.player.filter(x => x !== null).length;
+        const aiCount = state.ai.filter(x => x !== null).length;
+        return (playerCount === 0 || aiCount === 0);
+      }
+
+      evaluate(state) {
+        const playerCount = state.player.filter(x => x !== null).length;
+        const aiCount = state.ai.filter(x => x !== null).length;
+        if (aiCount === 0) return 10000; // AI获胜
+        if (playerCount === 0) return -10000; // 玩家获胜
+        let score = 0;
+        score += (2 - aiCount) * 200;
+        score -= (2 - playerCount) * 200;
+        const sumArr = arr => arr.reduce((s, v) => s + (v === null ? 0 : v), 0);
+        score += sumArr(state.ai) - sumArr(state.player);
+        let aiImmediate = 0;
+        for (let x of state.ai) {
+          if (x !== null && state.player.some(d => d === (10 - x))) {
+            aiImmediate++;
+          }
+        }
+        let playerImmediate = 0;
+        for (let x of state.player) {
+          if (x !== null && state.ai.some(d => d === (10 - x))) {
+            playerImmediate++;
+          }
+        }
+        score += (aiImmediate - playerImmediate) * 150;
+        return score;
+      }
+
+      minimax(state, depth, alpha, beta) {
+        if (depth === 0 || this.isTerminal(state)) {
+          return this.evaluate(state);
+        }
+        const moves = this.getPossibleMoves(state);
+        if (state.turn === "ai") {
+          let maxEval = -Infinity;
+          for (let move of moves) {
+            const newState = this.doMove(state, move);
+            const evalVal = this.minimax(newState, depth - 1, alpha, beta);
+            maxEval = Math.max(maxEval, evalVal);
+            alpha = Math.max(alpha, evalVal);
+            if (beta <= alpha) break;
+          }
+          return maxEval;
+        } else {
+          let minEval = Infinity;
+          for (let move of moves) {
+            const newState = this.doMove(state, move);
+            const evalVal = this.minimax(newState, depth - 1, alpha, beta);
+            minEval = Math.min(minEval, evalVal);
+            beta = Math.min(beta, evalVal);
+            if (beta <= alpha) break;
+          }
+          return minEval;
+        }
+      }
+
+      findBestMove(depth) {
+        let bestScore = -Infinity;
+        let bestMove = null;
+        const state = {
+          player: this.playerNumbers.slice(),
+          ai: this.aiNumbers.slice(),
+          turn: "ai"
+        };
+        const moves = this.getPossibleMoves(state);
+        for (let move of moves) {
+          const newState = this.doMove(state, move);
+          const score = this.minimax(newState, depth - 1, -Infinity, Infinity);
+          if (score > bestScore) {
+            bestScore = score;
+            bestMove = move;
+            // 若已找到必胜局面，则提前剪枝
+            if (bestScore === 10000) break;
+          }
+        }
+        return bestMove;
+      }
+      // ===== AI 部分结束 =====
+
+      makeAiMove() {
+        const depth = parseInt(document.getElementById('depth').value);
+        const bestMove = this.findBestMove(depth);
+        if (!bestMove) {
+          this.isPlayerTurn = true;
+          this.updateUI();
+          return;
+        }
+        if (bestMove.mover === "ai") {
+          let x = this.aiNumbers[bestMove.ownIndex];
+          let d = this.playerNumbers[bestMove.oppIndex];
+          let sum = x + d;
+          let newNum = sum % 10;
+          this.aiNumbers[bestMove.ownIndex] = (newNum === 0 ? null : newNum);
+        }
+        this.isPlayerTurn = true;
+        this.updateUI();
+        this.checkWin();
+      }
+
+      checkWin() {
+        const playerCount = this.playerNumbers.filter(n => n !== null).length;
+        const aiCount = this.aiNumbers.filter(n => n !== null).length;
+        if (playerCount === 0) {
+          document.getElementById('status').textContent = '你赢了！';
+          return true;
+        } else if (aiCount === 0) {
+          document.getElementById('status').textContent = 'AI赢了！';
+          return true;
+        }
+        document.getElementById('status').textContent = this.isPlayerTurn ? '轮到你的回合' : 'AI正在思考...';
+        return false;
+      }
+
+      updateUI() {
+        const playerNumElements = document.querySelectorAll('#player-numbers .number');
+        const aiNumElements = document.querySelectorAll('#ai-numbers .number');
+        playerNumElements.forEach((el, i) => {
+          el.textContent = this.playerNumbers[i] === null ? 'X' : this.playerNumbers[i];
+          el.classList.toggle('disabled', this.playerNumbers[i] === null);
+          el.classList.remove('selected');
+          el.style.transform = 'translateY(0)';
+        });
+        aiNumElements.forEach((el, i) => {
+          el.textContent = this.aiNumbers[i] === null ? 'X' : this.aiNumbers[i];
+          el.classList.toggle('disabled', this.aiNumbers[i] === null);
+          el.classList.remove('selected');
+          el.style.transform = 'translateY(0)';
+        });
+      }
+    }
+
+    // 初始化游戏
+    new Game();
+
+    // 添加深度滑块事件监听
+    const depthSlider = document.getElementById('depth');
+    const depthValue = document.getElementById('depth-value');
+    depthSlider.addEventListener('input', (e) => {
+      depthValue.textContent = e.target.value;
+    });
+  </script>
+</body>
+</html>
