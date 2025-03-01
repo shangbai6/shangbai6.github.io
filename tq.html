@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频OCR字幕提取工具</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+        }
+        .upload-container {
+            border: 2px dashed #3498db;
+            padding: 30px;
+            text-align: center;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-bottom: 20px;
+            transition: all 0.3s;
+        }
+        .upload-container:hover {
+            border-color: #2980b9;
+            background-color: #f7f9fa;
+        }
+        #video-container {
+            width: 100%;
+            display: none;
+            margin-bottom: 20px;
+        }
+        video {
+            width: 100%;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .settings-panel {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .settings-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        #progress-container {
+            display: none;
+            margin: 20px 0;
+        }
+        progress {
+            width: 100%;
+            height: 20px;
+            border-radius: 10px;
+        }
+        #result-container {
+            display: none;
+            margin-top: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            background-color: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        #subtitle-text {
+            white-space: pre-line;
+            line-height: 1.8;
+            max-height: 400px;
+            overflow-y: auto;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #3d8b40;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .copy-btn {
+            background-color: #2196F3;
+        }
+        .copy-btn:hover {
+            background-color: #0b7dda;
+        }
+        .timestamp {
+            color: #666;
+            font-size: 0.8em;
+            margin-right: 8px;
+        }
+        .paragraph {
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px dashed #eee;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        select, input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        #debug-info {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            height: 200px;
+            overflow-y: auto;
+        }
+        #canvas-preview {
+            max-width: 100%;
+            height: 200px;
+            display: none;
+            margin-top: 10px;
+            border: 1px solid #ddd;
+        }
+        /* 通知消息样式 */
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            background-color: #333;
+            color: white;
+            border-radius: 4px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .notification.show {
+            opacity: 1;
+        }
+        .loading-indicator {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <h1>视频OCR字幕提取工具</h1>
+    <div class="upload-container" id="upload-area">
+        <p><strong>点击或拖拽上传视频文件</strong></p>
+        <p style="color: #666;">支持mp4, webm, avi等常见视频格式</p>
+        <input type="file" id="video-upload" accept="video/*" style="display:none">
+    </div>
+    
+    <div id="video-container">
+        <video id="video-player" controls></video>
+        
+        <div class="settings-panel">
+            <h3>OCR设置</h3>
+            <div class="settings-grid">
+                <div>
+                    <label for="lang-select">识别语言:</label>
+                    <select id="lang-select">
+                        <option value="chi_sim+eng">中文简体+英文</option>
+                        <option value="chi_tra+eng">中文繁体+英文</option>
+                        <option value="eng">仅英文</option>
+                        <option value="jpn+eng">日语+英文</option>
+                        <option value="kor+eng">韩语+英文</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="interval-input">采样间隔(秒):</label>
+                    <input type="number" id="interval-input" min="0.5" max="5" step="0.5" value="1">
+                </div>
+                <div>
+                    <label for="confidence-input">最低置信度(%):</label>
+                    <input type="number" id="confidence-input" min="0" max="100" value="60">
+                </div>
+                <div>
+                    <label for="preprocessing-select">图像预处理:</label>
+                    <select id="preprocessing-select">
+                        <option value="none" selected>无</option>
+                        <option value="threshold">阈值化(提高对比度)</option>
+                        <option value="grayscale">灰度化</option>
+                    </select>
+                </div>
+            </div>
+            <div style="margin-top: 10px;">
+                <label>
+                    <input type="checkbox" id="debug-checkbox" checked> 显示调试信息
+                </label>
+                <label style="margin-left: 15px;">
+                    <input type="checkbox" id="preview-checkbox"> 显示图像预览
+                </label>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button id="extract-btn">开始OCR提取字幕</button>
+            <button id="stop-btn" disabled>停止提取</button>
+            <button id="test-ocr-btn">测试OCR引擎</button>
+        </div>
+    </div>
+    
+    <div id="progress-container">
+        <p>正在OCR提取字幕，请稍候...</p>
+        <progress id="progress-bar" value="0" max="100"></progress>
+        <p id="progress-text">0%</p>
+        <p id="current-time"></p>
+        <div id="debug-info"></div>
+        <img id="canvas-preview">
+    </div>
+    
+    <div id="result-container">
+        <h3>提取结果：</h3>
+        <div id="subtitle-text"></div>
+        <div class="controls">
+            <button id="copy-btn" class="copy-btn">一键复制全部内容</button>
+            <button id="copy-clean-btn" class="copy-btn">复制纯文本(无时间戳)</button>
+            <button id="download-btn">下载字幕文本</button>
+        </div>
+    </div>
+
+    <div id="notification" class="notification"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const uploadArea = document.getElementById('upload-area');
+            const videoUpload = document.getElementById('video-upload');
+            const videoContainer = document.getElementById('video-container');
+            const videoPlayer = document.getElementById('video-player');
+            const extractBtn = document.getElementById('extract-btn');
+            const stopBtn = document.getElementById('stop-btn');
+            const testOcrBtn = document.getElementById('test-ocr-btn');
+            const progressContainer = document.getElementById('progress-container');
+            const progressBar = document.getElementById('progress-bar');
+            const progressText = document.getElementById('progress-text');
+            const currentTimeEl = document.getElementById('current-time');
+            const resultContainer = document.getElementById('result-container');
+            const subtitleText = document.getElementById('subtitle-text');
+            const copyBtn = document.getElementById('copy-btn');
+            const copyCleanBtn = document.getElementById('copy-clean-btn');
+            const downloadBtn = document.getElementById('download-btn');
+            const langSelect = document.getElementById('lang-select');
+            const intervalInput = document.getElementById('interval-input');
+            const confidenceInput = document.getElementById('confidence-input');
+            const preprocessingSelect = document.getElementById('preprocessing-select');
+            const debugCheckbox = document.getElementById('debug-checkbox');
+            const previewCheckbox = document.getElementById('preview-checkbox');
+            const debugInfo = document.getElementById('debug-info');
+            const canvasPreview = document.getElementById('canvas-preview');
+            const notification = document.getElementById('notification');
+            
+            let extractionRunning = false;
+            let shouldStop = false;
+            let subtitles = [];
+            let worker = null;
+            let tesseractLoaded = false;
+            let videoLoaded = false;
+            let processingFrame = false;
+            let lastRecognizedText = "";
+            
+            // 重置所有状态
+            function resetState() {
+                if (worker) {
+                    try {
+                        worker.terminate();
+                    } catch (e) {
+                        console.error("终止worker失败:", e);
+                    }
+                    worker = null;
+                }
+                subtitles = [];
+                extractionRunning = false;
+                shouldStop = false;
+                processingFrame = false;
+                updateButtonStates();
+            }
+            
+            function updateButtonStates() {
+                extractBtn.disabled = extractionRunning || !videoLoaded;
+                stopBtn.disabled = !extractionRunning;
+                testOcrBtn.disabled = extractionRunning || !tesseractLoaded;
+            }
+            
+            // 调试日志功能
+            debugInfo.style.display = debugCheckbox.checked ? 'block' : 'none';
+            
+            debugCheckbox.addEventListener('change', function() {
+                debugInfo.style.display = this.checked ? 'block' : 'none';
+            });
+            
+            previewCheckbox.addEventListener('change', function() {
+                canvasPreview.style.display = this.checked ? 'block' : 'none';
+            });
+            
+            function log(message) {
+                console.log(message);
+                const timestamp = new Date().toLocaleTimeString();
+                const logEntry = document.createElement('div');
+                logEntry.textContent = `[${timestamp}] ${message}`;
+                debugInfo.appendChild(logEntry);
+                debugInfo.scrollTop = debugInfo.scrollHeight;
+            }
+            
+            // 显示通知
+            function showNotification(message, duration = 3000) {
+                notification.innerHTML = message;
+                notification.classList.add('show');
+                
+                setTimeout(() => {
+                    notification.classList.remove('show');
+                }, duration);
+            }
+            
+            // 加载Tesseract.js
+            async function loadTesseract() {
+                return new Promise((resolve, reject) => {
+                    if (window.Tesseract) {
+                        log('Tesseract.js已存在');
+                        tesseractLoaded = true;
+                        resolve(window.Tesseract);
+                        return;
+                    }
+                    
+                    log('开始加载Tesseract.js...');
+                    showNotification('<div class="loading-indicator"></div>正在加载OCR引擎，请稍候...', 5000);
+                    
+                    const script = document.createElement('script');
+                    script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@3.0.3/dist/tesseract.min.js';
+                    script.onload = () => {
+                        log('Tesseract.js加载成功');
+                        tesseractLoaded = true;
+                        updateButtonStates();
+                        showNotification('OCR引擎加载成功!');
+                        resolve(window.Tesseract);
+                    };
+                    script.onerror = (e) => {
+                        const errorMsg = 'Tesseract.js加载失败';
+                        log(errorMsg);
+                        showNotification('OCR引擎加载失败，请刷新页面重试');
+                        reject(new Error(errorMsg));
+                    };
+                    document.head.appendChild(script);
+                });
+            }
+            
+            // 初始化Tesseract Worker
+            async function initWorker() {
+                try {
+                    if (!tesseractLoaded) {
+                        await loadTesseract();
+                    }
+                    
+                    if (worker) {
+                        try {
+                            await worker.terminate();
+                        } catch (e) {
+                            log('终止旧worker时出错: ' + e.message);
+                        }
+                    }
+                    
+                    log('正在初始化OCR引擎...');
+                    showNotification('<div class="loading-indicator"></div>初始化OCR引擎...');
+                    
+                    worker = await Tesseract.createWorker(langSelect.value);
+                    await worker.loadLanguage(langSelect.value);
+                    await worker.initialize(langSelect.value);
+                    log('OCR引擎初始化完成，语言: ' + langSelect.value);
+                    showNotification('OCR引擎已准备就绪');
+                    return true;
+                } catch (error) {
+                    log('OCR引擎初始化失败: ' + error.message);
+                    showNotification('OCR引擎初始化失败，请重试');
+                    worker = null;
+                    return false;
+                }
+            }
+            
+            // 测试OCR引擎
+            async function testOCR() {
+                if (extractionRunning) {
+                    showNotification('正在提取中，请先停止当前任务');
+                    return;
+                }
+                
+                try {
+                    log('开始OCR测试...');
+                    showNotification('<div class="loading-indicator"></div>正在测试OCR引擎...');
+                    testOcrBtn.disabled = true;
+                    
+                    // 确保Tesseract已加载和Worker已初始化
+                    if (!tesseractLoaded) {
+                        await loadTesseract();
+                    }
+                    
+                    // 每次测试都重新初始化worker以确保使用最新配置
+                    if (!await initWorker()) {
+                        throw new Error('OCR引擎初始化失败');
+                    }
+                    
+                    // 创建一个简单的测试图像
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = 400;
+                    canvas.height = 100;
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.font = '30px Arial';
+                    ctx.fillStyle = 'black';
+                    ctx.fillText('OCR测试文本 123', 50, 50);
+                    
+                    // 应用预处理
+                    applyPreprocessing(canvas, ctx);
+                    
+                    // 显示预览
+                    if (previewCheckbox.checked) {
+                        canvasPreview.style.display = 'block';
+                        canvasPreview.src = canvas.toDataURL('image/png');
+                    }
+                    
+                    // 执行OCR识别
+                    log('正在识别测试图像...');
+                    const result = await worker.recognize(canvas);
+                    
+                    log(`OCR测试成功 - 识别文本: "${result.data.text.trim()}", 置信度: ${result.data.confidence.toFixed(2)}%`);
+                    showNotification(`OCR测试成功!<br>识别文本: "${result.data.text.trim()}"<br>置信度: ${result.data.confidence.toFixed(2)}%`);
+                } catch (error) {
+                    log('OCR测试失败: ' + error.message);
+                    showNotification('OCR测试失败，详情请查看调试信息');
+                    console.error(error);
+                } finally {
+                    testOcrBtn.disabled = false;
+                    updateButtonStates();
+                }
+            }
+            
+            // 视频文件处理
+            uploadArea.addEventListener('click', () => {
+                videoUpload.click();
+            });
+            
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.style.borderColor = '#4CAF50';
+            });
+            
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.style.borderColor = '#3498db';
+            });
+            
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.style.borderColor = '#3498db';
+                
+                if (e.dataTransfer.files.length > 0) {
+                    handleVideoFile(e.dataTransfer.files[0]);
+                }
+            });
+            
+            videoUpload.addEventListener('change', () => {
+                if (videoUpload.files.length > 0) {
+                    handleVideoFile(videoUpload.files[0]);
+                }
+            });
+            
+            function handleVideoFile(file) {
+                if (!file.type.startsWith('video/')) {
+                    showNotification('请选择有效的视频文件');
+                    return;
+                }
+                
+                resetState();
+                
+                const videoURL = URL.createObjectURL(file);
+                videoPlayer.src = videoURL;
+                videoPlayer.onloadedmetadata = () => {
+                    log(`视频加载成功: ${file.name}, 时长: ${formatTime(videoPlayer.duration)}`);
+                    videoLoaded = true;
+                    videoContainer.style.display = 'block';
+                    updateButtonStates();
+                    // 自动加载Tesseract
+                    if (!tesseractLoaded) {
+                        loadTesseract().catch(error => {
+                            log('加载Tesseract时出错: ' + error.message);
+                        });
+                    }
+                };
+                
+                videoPlayer.onerror = () => {
+                    log('视频加载失败');
+                    videoLoaded = false;
+                    URL.revokeObjectURL(videoURL);
+                    showNotification('视频加载失败，请尝试其他格式');
+                    updateButtonStates();
+                };
+            }
+            
+            // 格式化时间
+            function formatTime(seconds) {
+                const h = Math.floor(seconds / 3600);
+                const m = Math.floor((seconds % 3600) / 60);
+                const s = Math.floor(seconds % 60);
+                const ms = Math.floor((seconds % 1) * 1000);
+                
+                return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
+            }
+            
+            // 应用图像预处理
+            function applyPreprocessing(canvas, ctx) {
+                const preprocessingType = preprocessingSelect.value;
+                if (preprocessingType === 'none') return;
+                
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+                
+                if (preprocessingType === 'grayscale') {
+                    for (let i = 0; i < data.length; i += 4) {
+                        const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+                        data[i] = avg; // R
+                        data[i + 1] = avg; // G
+                        data[i + 2] = avg; // B
+                    }
+                } else if (preprocessingType === 'threshold') {
+                    // 先转为灰度图
+                    for (let i = 0; i < data.length; i += 4) {
+                        const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+                        data[i] = avg;
+                        data[i + 1] = avg;
+                        data[i + 2] = avg;
+                    }
+                    
+                    // 应用阈值化
+                    const threshold = 128;
+                    for (let i = 0; i < data.length; i += 4) {
+                        const value = data[i] < threshold ? 0 : 255;
+                        data[i] = value;
+                        data[i + 1] = value;
+                        data[i + 2] = value;
+                    }
+                }
+                
+                ctx.putImageData(imageData, 0, 0);
+            }
+            
+            // 提取视频帧
+            function extractVideoFrame(time) {
+                return new Promise(resolve => {
+                    videoPlayer.currentTime = time;
+                    
+                    videoPlayer.onseeked = function() {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = videoPlayer.videoWidth;
+                        canvas.height = videoPlayer.videoHeight;
+                        const ctx = canvas.getContext('2d');
+                        
+                        // 绘制视频帧
+                        ctx.drawImage(videoPlayer, 0, 0, canvas.width, canvas.height);
+                        
+                        // 应用图像预处理
+                        applyPreprocessing(canvas, ctx);
+                        
+                        // 显示预览
+                        if (previewCheckbox.checked) {
+                            canvasPreview.style.display = 'block';
+                            canvasPreview.src = canvas.toDataURL('image/png');
+                        }
+                        
+                        resolve(canvas);
+                    };
+                });
+            }
+            
+            // 开始OCR提取
+            async function startExtraction() {
+                if (extractionRunning) return;
+                
+                try {
+                    if (!videoLoaded) {
+                        showNotification('请先上传视频文件');
+                        return;
+                    }
+                    
+                    // 确保Tesseract已加载
+                    if (!tesseractLoaded) {
+                        await loadTesseract();
+                    }
+                    
+                    // 初始化worker
+                    if (!await initWorker()) {
+                        throw new Error('OCR引擎初始化失败');
+                    }
+                    
+                    // 初始化变量和UI
+                    extractionRunning = true;
+                    shouldStop = false;
+                    subtitles = [];
+                    
+                    updateButtonStates();
+                    resultContainer.style.display = 'none';
+                    progressContainer.style.display = 'block';
+                    
+                    // 获取参数
+                    const interval = parseFloat(intervalInput.value);
+                    const minConfidence = parseFloat(confidenceInput.value);
+                    const duration = videoPlayer.duration;
+                    
+                    log(`开始OCR提取，间隔: ${interval}秒，最低置信度: ${minConfidence}%`);
+                    
+                    // 处理每一帧
+                    for (let time = 0; time < duration && !shouldStop; time += interval) {
+                        if (processingFrame) continue;
+                        
+                        processingFrame = true;
+                        const currentTime = time;
+                        const formattedTime = formatTime(currentTime);
+                        
+                        // 更新进度
+                        const progress = (currentTime / duration) * 100;
+                        progressBar.value = progress;
+                        progressText.textContent = `${progress.toFixed(1)}%`;
+                        currentTimeEl.textContent = `当前处理: ${formattedTime} / ${formatTime(duration)}`;
+                        
+                        try {
+                            log(`处理时间点: ${formattedTime}`);
+                            const frame = await extractVideoFrame(currentTime);
+                            const result = await worker.recognize(frame);
+                            
+                            // 检查置信度和文本内容
+                            const text = result.data.text.trim();
+                            const confidence = result.data.confidence;
+                            
+                            if (text && confidence >= minConfidence && text !== lastRecognizedText) {
+                                log(`识别文本: "${text}", 置信度: ${confidence.toFixed(2)}%`);
+                                
+                                subtitles.push({
+                                    time: currentTime,
+                                    text: text,
+                                    confidence: confidence
+                                });
+                                
+                                lastRecognizedText = text;
+                            } else if (!text) {
+                                log(`未识别到文本，置信度: ${confidence.toFixed(2)}%`);
+                            } else if (text === lastRecognizedText) {
+                                log(`文本重复，跳过: "${text}"`);
+                            } else {
+                                log(`文本置信度低于阈值: ${confidence.toFixed(2)}% < ${minConfidence}%`);
+                            }
+                        } catch (error) {
+                            log(`处理时间点 ${formattedTime} 时出错: ${error.message}`);
+                        }
+                        
+                        processingFrame = false;
+                    }
+                    
+                    if (shouldStop) {
+                        log('用户停止了提取');
+                        showNotification('提取已停止');
+                    } else {
+                        log('OCR提取完成');
+                        showNotification('OCR提取完成!');
+                    }
+                    
+                    // 显示结果
+                    displayResults();
+                } catch (error) {
+                    log('OCR提取过程中出错: ' + error.message);
+                    showNotification('OCR提取失败，详情请查看调试信息');
+                    console.error(error);
+                } finally {
+                    extractionRunning = false;
+                    processingFrame = false;
+                    progressContainer.style.display = 'none';
+                    updateButtonStates();
+                }
+            }
+            
+            // 停止提取
+            function stopExtraction() {
+                if (!extractionRunning) return;
+                
+                log('正在停止提取...');
+                shouldStop = true;
+            }
+            
+            // 显示结果
+            function displayResults() {
+                if (subtitles.length === 0) {
+                    subtitleText.textContent = '未找到字幕文本';
+                    resultContainer.style.display = 'block';
+                    return;
+                }
+                
+                // 按时间排序
+                subtitles.sort((a, b) => a.time - b.time);
+                
+                // 格式化结果
+                let resultHTML = '';
+                for (const subtitle of subtitles) {
+                    resultHTML += `<div class="paragraph">
+                                     <span class="timestamp">[${formatTime(subtitle.time)}]</span>
+                                     ${subtitle.text}
+                                   </div>`;
+                }
+                
+                subtitleText.innerHTML = resultHTML;
+                resultContainer.style.display = 'block';
+            }
+            
+            // 复制全部内容
+            copyBtn.addEventListener('click', () => {
+                try {
+                    const text = subtitleText.innerText;
+                    navigator.clipboard.writeText(text).then(() => {
+                        showNotification('已复制到剪贴板');
+                    });
+                } catch (error) {
+                    showNotification('复制失败，请手动选择并复制');
+                    console.error(error);
+                }
+            });
+            
+            // 复制纯文本（无时间戳）
+            copyCleanBtn.addEventListener('click', () => {
+                try {
+                    const paragraphs = subtitleText.querySelectorAll('.paragraph');
+                    let cleanText = '';
+                    
+                    paragraphs.forEach(p => {
+                        const content = p.textContent.replace(/^\[\d{2}:\d{2}:\d{2}\.\d{3}\]\s*/, '');
+                        cleanText += content + '\n\n';
+                    });
+                    
+                    navigator.clipboard.writeText(cleanText.trim()).then(() => {
+                        showNotification('已复制纯文本到剪贴板');
+                    });
+                } catch (error) {
+                    showNotification('复制失败，请手动选择并复制');
+                    console.error(error);
+                }
+            });
+            
+            // 下载字幕文本
+            downloadBtn.addEventListener('click', () => {
+                try {
+                    const text = subtitleText.innerText;
+                    const blob = new Blob([text], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = '字幕文本.txt';
+                    document.body.appendChild(a);
+                    a.click();
+                    
+                    setTimeout(() => {
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    }, 100);
+                    
+                    showNotification('字幕文本已下载');
+                } catch (error) {
+                    showNotification('下载失败');
+                    console.error(error);
+                }
+            });
+            
+            // 初始化事件监听
+            extractBtn.addEventListener('click', startExtraction);
+            stopBtn.addEventListener('click', stopExtraction);
+            testOcrBtn.addEventListener('click', testOCR);
+            
+            // 初始化UI状态
+            updateButtonStates();
+            debugInfo.style.display = debugCheckbox.checked ? 'block' : 'none';
+            canvasPreview.style.display = previewCheckbox.checked ? 'block' : 'none';
+            
+            // 页面加载完成后自动加载Tesseract
+            setTimeout(() => {
+                loadTesseract().catch(error => {
+                    log('自动加载Tesseract时出错: ' + error.message);
+                });
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
