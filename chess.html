@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>国际象棋AI</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 20px;
+        }
+        .board {
+            display: grid;
+            grid-template-columns: repeat(8, 50px);
+            grid-template-rows: repeat(8, 50px);
+            border: 2px solid #333;
+            margin-bottom: 20px;
+        }
+        .cell {
+            width: 50px;
+            height: 50px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 32px;
+            cursor: pointer;
+        }
+        .white {
+            background-color: #f0d9b5;
+        }
+        .black {
+            background-color: #b58863;
+        }
+        .selected {
+            background-color: #aaddff;
+        }
+        .possible-move {
+            position: relative;
+        }
+        .possible-move::after {
+            content: "";
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background-color: rgba(0, 0, 0, 0.2);
+            border-radius: 50%;
+        }
+        .controls {
+            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .difficulty {
+            margin: 10px 0;
+            width: 200px;
+        }
+        .status {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        button {
+            margin: 5px;
+            padding: 8px 16px;
+        }
+    </style>
+</head>
+<body>
+    <h1>国际象棋AI</h1>
+    <div class="board" id="board"></div>
+    <div class="controls">
+        <div>
+            <label for="difficulty">AI难度 (搜索深度): <span id="difficultyValue">4</span></label>
+            <input type="range" id="difficulty" class="difficulty" min="1" max="10" value="4" step="1">
+        </div>
+        <div>
+            <button id="newGame">新游戏</button>
+            <button id="undoMove">撤销一步</button>
+        </div>
+        <div class="status" id="status">轮到白方走</div>
+    </div>
+
+    <script>
+        // 棋盘状态
+        const EMPTY = 0;
+        const PAWN = 1, KNIGHT = 2, BISHOP = 3, ROOK = 4, QUEEN = 5, KING = 6;
+        const WHITE = 8, BLACK = 16;
+        
+        // 棋子的字符表示
+        const pieceSymbols = {
+            [WHITE | PAWN]: '♙', [BLACK | PAWN]: '♟',
+            [WHITE | KNIGHT]: '♘', [BLACK | KNIGHT]: '♞',
+            [WHITE | BISHOP]: '♗', [BLACK | BISHOP]: '♝',
+            [WHITE | ROOK]: '♖', [BLACK | ROOK]: '♜',
+            [WHITE | QUEEN]: '♕', [BLACK | QUEEN]: '♛',
+            [WHITE | KING]: '♔', [BLACK | KING]: '♚',
+            [EMPTY]: ''
+        };
+        
+        let board = Array(8).fill().map(() => Array(8).fill(EMPTY));
+        let selectedCell = null;
+        let possibleMoves = [];
+        let currentPlayer = WHITE;
+        let gameHistory = [];
+        let aiThinking = false;
+        
+        // 初始化棋盘
+        function initBoard() {
+            // 放置棋子
+            // 黑方棋子
+            board[0][0] = BLACK | ROOK;
+            board[0][1] = BLACK | KNIGHT;
+            board[0][2] = BLACK | BISHOP;
+            board[0][3] = BLACK | QUEEN;
+            board[0][4] = BLACK | KING;
+            board[0][5] = BLACK | BISHOP;
+            board[0][6] = BLACK | KNIGHT;
+            board[0][7] = BLACK | ROOK;
+            for (let i = 0; i < 8; i++) {
+                board[1][i] = BLACK | PAWN;
+            }
+            
+            // 白方棋子
+            board[7][0] = WHITE | ROOK;
+            board[7][1] = WHITE | KNIGHT;
+            board[7][2] = WHITE | BISHOP;
+            board[7][3] = WHITE | QUEEN;
+            board[7][4] = WHITE | KING;
+            board[7][5] = WHITE | BISHOP;
+            board[7][6] = WHITE | KNIGHT;
+            board[7][7] = WHITE | ROOK;
+            for (let i = 0; i < 8; i++) {
+                board[6][i] = WHITE | PAWN;
+            }
+            
+            // 清空中间部分
+            for (let i = 2; i < 6; i++) {
+                for (let j = 0; j < 8; j++) {
+                    board[i][j] = EMPTY;
+                }
+            }
+        }
+        
+        // 渲染棋盘
+        function renderBoard() {
+            const boardElement = document.getElementById('board');
+            boardElement.innerHTML = '';
+            
+            for (let i = 0; i < 8; i++) {
+                for (let j = 0; j < 8; j++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('cell');
+                    cell.classList.add((i + j) % 2 === 0 ? 'white' : 'black');
+                    
+                    // 显示棋子
+                    cell.textContent = pieceSymbols[board[i][j]];
+                    
+                    // 添加点击事件
+                    cell.dataset.row = i;
+                    cell.dataset.col = j;
+                    cell.addEventListener('click', handleCellClick);
+                    
+                    // 高亮选中的格子
+                    if (selectedCell && selectedCell.row === i && selectedCell.col === j) {
+                        cell.classList.add('selected');
+                    }
+                    
+                    // 高亮可能的移动位置
+                    if (possibleMoves.some(move => move.toRow === i && move.toCol === j)) {
+                        cell.classList.add('possible-move');
+                    }
+                    
+                    boardElement.appendChild(cell);
+                }
+            }
+        }
+        
+        // 处理格子点击事件
+        function handleCellClick(event) {
+            if (aiThinking || currentPlayer === BLACK) return;
+            
+            const row = parseInt(event.target.dataset.row);
+            const col = parseInt(event.target.dataset.col);
+            const piece = board[row][col];
+            
+            // 如果点击的是自己的棋子，选中它
+            if ((piece & WHITE) && currentPlayer === WHITE) {
+                selectedCell = { row, col };
+                possibleMoves = getValidMoves(row, col);
+                renderBoard();
+                return;
+            }
+            
+            // 如果已经选择了棋子，并且点击的是有效移动位置
+            if (selectedCell) {
+                const move = possibleMoves.find(m => m.toRow === row && m.toCol === col);
+                if (move) {
+                    makeMove(move);
+                    selectedCell = null;
+                    possibleMoves = [];
+                    renderBoard();
+                    updateStatus();
+                    
+                    // AI走棋
+                    setTimeout(makeAIMove, 500);
+                    return;
+                }
+            }
+            
+            // 如果点击的不是有效位置，取消选择
+            selectedCell = null;
+            possibleMoves = [];
+            renderBoard();
+        }
+        
+        // 获取有效的移动
+        function getValidMoves(row, col) {
+            const piece = board[row][col];
+            if (piece === EMPTY) return [];
+            
+            const pieceType = piece & 7;
+            const pieceColor = piece & 24;
+            const moves = [];
+            
+            // 兵的移动
+            if (pieceType === PAWN) {
+                const direction = pieceColor === WHITE ? -1 : 1;
+                const startRow = pieceColor === WHITE ? 6 : 1;
+                
+                // 前进一步
+                if (board[row + direction][col] === EMPTY) {
+                    moves.push({ fromRow: row, fromCol: col, toRow: row + direction, toCol: col });
+                    
+                    // 第一次移动可以前进两步
+                    if (row === startRow && board[row + 2 * direction][col] === EMPTY) {
+                        moves.push({ fromRow: row, fromCol: col, toRow: row + 2 * direction, toCol: col });
+                    }
+                }
+                
+                // 吃子
+                for (let dc of [-1, 1]) {
+                    if (col + dc >= 0 && col + dc < 8) {
+                        const targetPiece = board[row + direction][col + dc];
+                        if (targetPiece !== EMPTY && (targetPiece & 24) !== pieceColor) {
+                            moves.push({ fromRow: row, fromCol: col, toRow: row + direction, toCol: col + dc });
+                        }
+                    }
+                }
+            }
+            
+            // 马的移动
+            else if (pieceType === KNIGHT) {
+                const knightMoves = [
+                    [-2, -1], [-2, 1], [-1, -2], [-1, 2], [1, -2], [1, 2], [2, -1], [2, 1]
+                ];
+                
+                for (const [dr, dc] of knightMoves) {
+                    const newRow = row + dr;
+                    const newCol = col + dc;
+                    
+                    if (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) {
+                        const targetPiece = board[newRow][newCol];
+                        if (targetPiece === EMPTY || (targetPiece & 24) !== pieceColor) {
+                            moves.push({ fromRow: row, fromCol: col, toRow: newRow, toCol: newCol });
+                        }
+                    }
+                }
+            }
+            
+            // 象/主教的移动
+            else if (pieceType === BISHOP) {
+                const directions = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
+                
+                for (const [dr, dc] of directions) {
+                    for (let i = 1; i < 8; i++) {
+                        const newRow = row + i * dr;
+                        const newCol = col + i * dc;
+                        
+                        if (newRow < 0 || newRow >= 8 || newCol < 0 || newCol >= 8) break;
+                        
+                        const targetPiece = board[newRow][newCol];
+                        if (targetPiece === EMPTY) {
+                            moves.push({ fromRow: row, fromCol: col, toRow: newRow, toCol: newCol });
+                        } else {
+                            if ((targetPiece & 24) !== pieceColor) {
+                                moves.push({ fromRow: row, fromCol: col, toRow: newRow, toCol: newCol });
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // 车的移动
+            else if (pieceType === ROOK) {
+                const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+                
+                for (const [dr, dc] of directions) {
+                    for (let i = 1; i < 8; i++) {
+                        const newRow = row + i * dr;
+                        const newCol = col + i * dc;
+                        
+                        if (newRow < 0 || newRow >= 8 || newCol < 0 || newCol >= 8) break;
+                        
+                        const targetPiece = board[newRow][newCol];
+                        if (targetPiece === EMPTY) {
+                            moves.push({ fromRow: row, fromCol: col, toRow: newRow, toCol: newCol });
+                        } else {
+                            if ((targetPiece & 24) !== pieceColor) {
+                                moves.push({ fromRow: row, fromCol: col, toRow: newRow, toCol: newCol });
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // 皇后的移动 (象+车的组合)
+            else if (pieceType === QUEEN) {
+                const directions = [[-1, -1], [-1, 1], [1, -1], [1, 1], [-1, 0], [1, 0], [0, -1], [0, 1]];
+                
+                for (const [dr, dc] of directions) {
+                    for (let i = 1; i < 8; i++) {
+                        const newRow = row + i * dr;
+                        const newCol = col + i * dc;
+                        
+                        if (newRow < 0 || newRow >= 8 || newCol < 0 || newCol >= 8) break;
+                        
+                        const targetPiece = board[newRow][newCol];
+                        if (targetPiece === EMPTY) {
+                            moves.push({ fromRow: row, fromCol: col, toRow: newRow, toCol: newCol });
+                        } else {
+                            if ((targetPiece & 24) !== pieceColor) {
+                                moves.push({ fromRow: row, fromCol: col, toRow: newRow, toCol: newCol });
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // 王的移动
+            else if (pieceType === KING) {
+                const directions = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]];
+                
+                for (const [dr, dc] of directions) {
+                    const newRow = row + dr;
+                    const newCol = col + dc;
+                    
+                    if (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) {
+                        const targetPiece = board[newRow][newCol];
+                        if (targetPiece === EMPTY || (targetPiece & 24) !== pieceColor) {
+                            moves.push({ fromRow: row, fromCol: col, toRow: newRow, toCol: newCol });
+                        }
+                    }
+                }
+            }
+            
+            return moves;
+        }
+        
+        // 执行移动
+        function makeMove(move) {
+            const { fromRow, fromCol, toRow, toCol } = move;
+            
+            // 保存历史记录
+            gameHistory.push({
+                board: board.map(row => [...row]),
+                move,
+                currentPlayer
+            });
+            
+            // 移动棋子
+            board[toRow][toCol] = board[fromRow][fromCol];
+            board[fromRow][fromCol] = EMPTY;
+            
+            // 兵升变为皇后
+            if ((board[toRow][toCol] & 7) === PAWN) {
+                if ((board[toRow][toCol] & WHITE) && toRow === 0) {
+                    board[toRow][toCol] = WHITE | QUEEN;
+                } else if ((board[toRow][toCol] & BLACK) && toRow === 7) {
+                    board[toRow][toCol] = BLACK | QUEEN;
+                }
+            }
+            
+            // 切换玩家
+            currentPlayer = currentPlayer === WHITE ? BLACK : WHITE;
+        }
+        
+        // 撤销一步
+        function undoMove() {
+            if (gameHistory.length === 0) return;
+            
+            const lastState = gameHistory.pop();
+            board = lastState.board;
+            currentPlayer = lastState.currentPlayer;
+            
+            // 如果AI刚走完，需要额外撤销一步
+            if (currentPlayer === BLACK && gameHistory.length > 0) {
+                const playerState = gameHistory.pop();
+                board = playerState.board;
+                currentPlayer = playerState.currentPlayer;
+            }
+            
+            selectedCell = null;
+            possibleMoves = [];
+            renderBoard();
+            updateStatus();
+        }
+        
+        // 获取所有有效移动
+        function getAllValidMoves(color) {
+            const moves = [];
+            
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const piece = board[row][col];
+                    if (piece !== EMPTY && (piece & 24) === color) {
+                        const pieceMoves = getValidMoves(row, col);
+                        moves.push(...pieceMoves);
+                    }
+                }
+            }
+            
+            return moves;
+        }
+        
+        // 评估棋盘状态
+        function evaluateBoard() {
+            let score = 0;
+            
+            // 棋子价值
+            const pieceValues = {
+                [PAWN]: 100,
+                [KNIGHT]: 320,
+                [BISHOP]: 330,
+                [ROOK]: 500,
+                [QUEEN]: 900,
+                [KING]: 20000
+            };
+            
+            // 位置权重
+            const pawnPositionValues = [
+                [0, 0, 0, 0, 0, 0, 0, 0],
+                [50, 50, 50, 50, 50, 50, 50, 50],
+                [10, 10, 20, 30, 30, 20, 10, 10],
+                [5, 5, 10, 25, 25, 10, 5, 5],
+                [0, 0, 0, 20, 20, 0, 0, 0],
+                [5, -5, -10, 0, 0, -10, -5, 5],
+                [5, 10, 10, -20, -20, 10, 10, 5],
+                [0, 0, 0, 0, 0, 0, 0, 0]
+            ];
+            
+            // 计算每个棋子的分数
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const piece = board[row][col];
+                    if (piece === EMPTY) continue;
+                    
+                    const pieceType = piece & 7;
+                    const pieceColor = piece & 24;
+                    
+                    let value = pieceValues[pieceType];
+                    
+                    // 位置加成
+                    if (pieceType === PAWN) {
+                        if (pieceColor === WHITE) {
+                            value += pawnPositionValues[row][col];
+                        } else {
+                            value += pawnPositionValues[7 - row][col];
+                        }
+                    }
+                    
+                    if (pieceColor === WHITE) {
+                        score += value;
+                    } else {
+                        score -= value;
+                    }
+                }
+            }
+            
+            return score;
+        }
+        
+        // Minimax算法（带Alpha-Beta剪枝）
+        function minimax(depth, alpha, beta, maximizingPlayer) {
+            if (depth === 0) {
+                return evaluateBoard();
+            }
+            
+            if (maximizingPlayer) {
+                let maxEval = -Infinity;
+                const moves = getAllValidMoves(WHITE);
+                
+                for (const move of moves) {
+                    // 模拟移动
+                    const { fromRow, fromCol, toRow, toCol } = move;
+                    const capturedPiece = board[toRow][toCol];
+                    board[toRow][toCol] = board[fromRow][fromCol];
+                    board[fromRow][fromCol] = EMPTY;
+                    
+                    const eval = minimax(depth - 1, alpha, beta, false);
+                    
+                    // 撤销移动
+                    board[fromRow][fromCol] = board[toRow][toCol];
+                    board[toRow][toCol] = capturedPiece;
+                    
+                    maxEval = Math.max(maxEval, eval);
+                    alpha = Math.max(alpha, eval);
+                    if (beta <= alpha) break;
+                }
+                
+                return maxEval;
+            } else {
+                let minEval = Infinity;
+                const moves = getAllValidMoves(BLACK);
+                
+                for (const move of moves) {
+                    // 模拟移动
+                    const { fromRow, fromCol, toRow, toCol } = move;
+                    const capturedPiece = board[toRow][toCol];
+                    board[toRow][toCol] = board[fromRow][fromCol];
+                    board[fromRow][fromCol] = EMPTY;
+                    
+                    const eval = minimax(depth - 1, alpha, beta, true);
+                    
+                    // 撤销移动
+                    board[fromRow][fromCol] = board[toRow][toCol];
+                    board[toRow][toCol] = capturedPiece;
+                    
+                    minEval = Math.min(minEval, eval);
+                    beta = Math.min(beta, eval);
+                    if (beta <= alpha) break;
+                }
+                
+                return minEval;
+            }
+        }
+        
+        // AI走棋
+        function makeAIMove() {
+            if (currentPlayer !== BLACK) return;
+            
+            aiThinking = true;
+            updateStatus("AI正在思考...");
+            
+            // 延迟执行，让UI有时间更新
+            setTimeout(() => {
+                const depth = parseInt(document.getElementById('difficulty').value);
+                const moves = getAllValidMoves(BLACK);
+                
+                if (moves.length === 0) {
+                    updateStatus("无法行棋，游戏结束");
+                    aiThinking = false;
+                    return;
+                }
+                
+                let bestMove = null;
+                let bestScore = Infinity;
+                
+                for (const move of moves) {
+                    // 模拟移动
+                    const { fromRow, fromCol, toRow, toCol } = move;
+                    const capturedPiece = board[toRow][toCol];
+                    board[toRow][toCol] = board[fromRow][fromCol];
+                    board[fromRow][fromCol] = EMPTY;
+                    
+                    const score = minimax(depth - 1, -Infinity, Infinity, true);
+                    
+                    // 撤销移动
+                    board[fromRow][fromCol] = board[toRow][toCol];
+                    board[toRow][toCol] = capturedPiece;
+                    
+                    if (score < bestScore) {
+                        bestScore = score;
+                        bestMove = move;
+                    }
+                }
+                
+                if (bestMove) {
+                    makeMove(bestMove);
+                    renderBoard();
+                    updateStatus();
+                }
+                
+                aiThinking = false;
+            }, 100);
+        }
+        
+        // 更新状态信息
+        function updateStatus(message) {
+            const statusElement = document.getElementById('status');
+            
+            if (message) {
+                statusElement.textContent = message;
+                return;
+            }
+            
+            if (currentPlayer === WHITE) {
+                statusElement.textContent = "轮到白方走";
+            } else {
+                statusElement.textContent = "轮到黑方走";
+            }
+        }
+        
+        // 初始化游戏
+        function init() {
+            initBoard();
+            renderBoard();
+            updateStatus();
+            
+            // 添加事件监听
+            document.getElementById('newGame').addEventListener('click', () => {
+                gameHistory = [];
+                currentPlayer = WHITE;
+                selectedCell = null;
+                possibleMoves = [];
+                initBoard();
+                renderBoard();
+                updateStatus();
+            });
+            
+            document.getElementById('undoMove').addEventListener('click', undoMove);
+            
+            const difficultySlider = document.getElementById('difficulty');
+            const difficultyValue = document.getElementById('difficultyValue');
+            
+            difficultySlider.addEventListener('input', () => {
+                difficultyValue.textContent = difficultySlider.value;
+            });
+        }
+        
+        // 启动游戏
+        window.onload = init;
+    </script>
+</body>
+</html>
