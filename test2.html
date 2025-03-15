@@ -91,6 +91,10 @@
         .white-stone {
             background-color: #fff;
         }
+        .pending-stone {
+            opacity: 0.6;
+            border: 2px dashed #ff0000;
+        }
         .controls {
             display: flex;
             flex-direction: column;
@@ -108,6 +112,17 @@
         button:disabled {
             background-color: #cccccc;
             cursor: not-allowed;
+        }
+        .move-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        #confirmMoveBtn {
+            background-color: #2196F3;
+        }
+        #cancelMoveBtn {
+            background-color: #f44336;
         }
         .game-id-container {
             margin-top: 10px;
@@ -174,6 +189,11 @@
             </div>
         </div>
 
+        <div class="move-controls" id="moveControls" style="display: none;">
+            <button id="confirmMoveBtn">确认落子</button>
+            <button id="cancelMoveBtn">取消</button>
+        </div>
+
         <div class="controls">
             <button id="newGameBtn" disabled>创建新游戏</button>
             <div style="display: flex; gap: 10px;">
@@ -225,6 +245,10 @@
         let gameBoard = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(EMPTY));
         let currentTurn = BLACK; // 黑子先行
         let gameStatus = 'waiting';
+        
+        // 待确认的落子
+        let pendingMove = null;
+        let pendingStoneElement = null;
 
         // DOM元素
         const boardElement = document.getElementById('board');
@@ -238,6 +262,9 @@
         const gameIdDisplay = document.getElementById('gameIdDisplay');
         const copyIdBtn = document.getElementById('copyIdBtn');
         const leaveGameBtn = document.getElementById('leaveGameBtn');
+        const moveControls = document.getElementById('moveControls');
+        const confirmMoveBtn = document.getElementById('confirmMoveBtn');
+        const cancelMoveBtn = document.getElementById('cancelMoveBtn');
 
         // 初始化游戏
         function initGame() {
@@ -288,6 +315,8 @@
             joinGameBtn.addEventListener('click', joinGame);
             copyIdBtn.addEventListener('click', copyGameId);
             leaveGameBtn.addEventListener('click', leaveGame);
+            confirmMoveBtn.addEventListener('click', confirmMove);
+            cancelMoveBtn.addEventListener('click', cancelPendingMove);
         }
 
         // 启用控制按钮
@@ -295,6 +324,7 @@
             newGameBtn.disabled = false;
             joinGameBtn.disabled = false;
             leaveGameBtn.disabled = true;
+            moveControls.style.display = 'none';
         }
 
         // 创建新游戏
@@ -428,6 +458,9 @@
             if (!gameId) return;
             
             try {
+                // 取消任何待确认的落子
+                cancelPendingMove();
+                
                 if (playerId === 1) {
                     // 如果是玩家1离开
                     await update(currentGameRef, {
@@ -463,6 +496,9 @@
 
         // 重置游戏状态
         function resetGameState() {
+            // 取消任何待确认的落子
+            cancelPendingMove();
+            
             // 清理变量
             gameId = null;
             playerId = null;
@@ -529,8 +565,8 @@
 
         // 根据Firebase数据更新棋盘显示
         function updateBoardFromFirebase(boardData) {
-            // 清除现有棋子
-            const stones = document.querySelectorAll('.stone');
+            // 清除现有棋子（但保留待确认棋子）
+            const stones = document.querySelectorAll('.stone:not(.pending-stone)');
             stones.forEach(stone => stone.remove());
             
             // 更新本地棋盘状态
@@ -581,7 +617,7 @@
                 updateStatus('等待另一位玩家加入...');
             } else if (gameData.status === 'active') {
                 if (gameData.currentTurn === playerColor) {
-                    updateStatus('轮到您了!');
+                    updateStatus('轮到您了! 请点击棋盘选择位置');
                 } else {
                     updateStatus('对手的回合');
                 }
@@ -614,44 +650,105 @@
             
             const rect = boardElement.getBoundingClientRect();
             const boardSize = Math.min(rect.width, rect.height);
+            
+            // 获取点击坐标相对于棋盘的位置
             const boardX = event.clientX - rect.left;
             const boardY = event.clientY - rect.top;
             
-            // 转换为百分比
-            const pctX = boardX / boardSize * 100;
-            const pctY = boardY / boardSize * 100;
+            // 调整为棋盘内的网格位置
+            const gridWidth = boardSize * 0.8; // 网格占棋盘的80%（两边各有10%的边距）
+            const gridX = boardX - (boardSize * 0.1); // 减去左边距
+            const gridY = boardY - (boardSize * 0.1); // 减去上边距
             
-            // 调整网格边距（每边10px）
-            const adjustedPctX = (pctX - 10) / 80 * 100;
-            const adjustedPctY = (pctY - 10) / 80 * 100;
+            // 计算单元格大小
+            const cellSize = gridWidth / (BOARD_SIZE - 1);
             
-            // 计算点击的单元格
-            const cellSize = 100 / (BOARD_SIZE - 1);
-            const col = Math.round(adjustedPctX / cellSize);
-            const row = Math.round(adjustedPctY / cellSize);
+            // 计算最接近的交叉点
+            const col = Math.round(gridX / cellSize);
+            const row = Math.round(gridY / cellSize);
             
             // 检查是否有效坐标
             if (row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
-                makeMove(row, col);
+                // 检查位置是否已经有棋子
+                if (gameBoard[row][col] !== EMPTY) {
+                    updateStatus('此位置已有棋子，请选择其他位置');
+                    return;
+                }
+                
+                // 创建待确认的落子
+                createPendingMove(row, col);
             }
         }
 
-        // 在棋盘上落子
-        async function makeMove(row, col) {
+        // 创建待确认的落子
+        function createPendingMove(row, col) {
+            // 取消之前的待确认落子（如果有）
+            cancelPendingMove();
+            
+            // 设置新的待确认落子
+            pendingMove = { row, col };
+            
+            // 显示待确认的棋子
+            const cellSize = 100 / (BOARD_SIZE - 1);
+            const posX = col * cellSize;
+            const posY = row * cellSize;
+            const stoneSize = cellSize * 0.8;
+            
+            pendingStoneElement = document.createElement('div');
+            pendingStoneElement.classList.add('stone', 'pending-stone');
+            pendingStoneElement.classList.add(playerColor === BLACK ? 'black-stone' : 'white-stone');
+            
+            pendingStoneElement.style.left = `${posX}%`;
+            pendingStoneElement.style.top = `${posY}%`;
+            pendingStoneElement.style.width = `${stoneSize}%`;
+            pendingStoneElement.style.height = `${stoneSize}%`;
+            
+            gridElement.appendChild(pendingStoneElement);
+            
+            // 显示确认按钮
+            moveControls.style.display = 'flex';
+            updateStatus('确认落子位置？');
+        }
+
+        // 取消待确认的落子
+        function cancelPendingMove() {
+            if (pendingStoneElement) {
+                pendingStoneElement.remove();
+                pendingStoneElement = null;
+            }
+            
+            pendingMove = null;
+            moveControls.style.display = 'none';
+            
+            // 如果游戏仍在进行，更新状态提示
+            if (gameStatus === 'active' && currentTurn === playerColor) {
+                updateStatus('轮到您了! 请点击棋盘选择位置');
+            }
+        }
+
+        // 确认落子
+        async function confirmMove() {
+            if (!pendingMove) return;
+            
+            const { row, col } = pendingMove;
+            
             // 检查单元格是否为空
             if (gameBoard[row][col] !== EMPTY) {
+                updateStatus('此位置已有棋子，请选择其他位置');
+                cancelPendingMove();
                 return;
             }
             
             // 更新本地棋盘
-            gameBoard[row][col] = playerColor;
+            const updatedBoard = JSON.parse(JSON.stringify(gameBoard)); // 创建深拷贝
+            updatedBoard[row][col] = playerColor;
             
             // 检查是否获胜
-            const hasWon = checkWinCondition(row, col, playerColor);
+            const hasWon = checkWinCondition(row, col, playerColor, updatedBoard);
             
             // 准备Firebase更新
             const updates = {
-                board: gameBoard,
+                board: updatedBoard,
                 currentTurn: playerColor === BLACK ? WHITE : BLACK,
                 lastUpdate: Date.now()
             };
@@ -659,10 +756,13 @@
             if (hasWon) {
                 updates.status = 'finished';
                 updates.winner = playerColor;
-            } else if (isBoardFull()) {
+            } else if (isBoardFull(updatedBoard)) {
                 updates.status = 'finished';
                 updates.winner = null; // 平局
             }
+            
+            // 移除待确认的落子显示
+            cancelPendingMove();
             
             // 更新Firebase
             try {
@@ -674,7 +774,7 @@
         }
 
         // 检查获胜条件（五子连珠）
-        function checkWinCondition(row, col, playerColor) {
+        function checkWinCondition(row, col, playerColor, board) {
             const directions = [
                 [0, 1],  // 水平
                 [1, 0],  // 垂直
@@ -686,10 +786,10 @@
                 let count = 1;  // 计算放置的棋子本身
                 
                 // 检查正方向
-                count += countConsecutive(row, col, dx, dy, playerColor);
+                count += countConsecutive(row, col, dx, dy, playerColor, board);
                 
                 // 检查负方向
-                count += countConsecutive(row, col, -dx, -dy, playerColor);
+                count += countConsecutive(row, col, -dx, -dy, playerColor, board);
                 
                 if (count >= 5) {
                     return true;
@@ -700,7 +800,7 @@
         }
 
         // 计算一个方向上的连续棋子
-        function countConsecutive(row, col, dx, dy, playerColor) {
+        function countConsecutive(row, col, dx, dy, playerColor, board) {
             let count = 0;
             let r = row + dx;
             let c = col + dy;
@@ -708,7 +808,7 @@
             while (
                 r >= 0 && r < BOARD_SIZE &&
                 c >= 0 && c < BOARD_SIZE &&
-                gameBoard[r][c] === playerColor
+                board[r][c] === playerColor
             ) {
                 count++;
                 r += dx;
@@ -719,10 +819,10 @@
         }
 
         // 检查棋盘是否已满（平局）
-        function isBoardFull() {
+        function isBoardFull(board) {
             for (let row = 0; row < BOARD_SIZE; row++) {
                 for (let col = 0; col < BOARD_SIZE; col++) {
-                    if (gameBoard[row][col] === EMPTY) {
+                    if (board[row][col] === EMPTY) {
                         return false;
                     }
                 }
