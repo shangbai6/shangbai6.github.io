@@ -455,8 +455,16 @@
                         const cell = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
                         const pieceElem = document.createElement('div');
                         
-                        // 判断红黑方
-                        const side = '車馬相仕帥炮兵'.includes(piece) ? 'red' : 'black';
+                        // 判断红黑方 - 修正判断逻辑，根据位置和棋子类型判断
+                        let side;
+                        if (row < 5) {
+                            // 上半部分棋盘，红方
+                            side = 'red';
+                        } else {
+                            // 下半部分棋盘，黑方
+                            side = 'black';
+                        }
+                        
                         pieceElem.className = `piece ${side}`;
                         pieceElem.textContent = piece;
                         pieceElem.setAttribute('data-row', row);
@@ -632,7 +640,7 @@
             if (!piece) return;
             
             // 检查是否是当前玩家的棋子
-            const pieceColor = '車馬相仕帥炮兵'.includes(piece) ? 'red' : 'black';
+            const pieceColor = row < 5 ? 'red' : 'black';
             if (pieceColor !== playerSide) return;
             
             // 选择棋子
@@ -927,9 +935,10 @@
                         hasPlatform = true;
                     } else {
                         // 找到目标，检查是否可以吃子
-                        const piece = gameState[r][c];
-                        const pieceColor = '車馬相仕帥炮兵'.includes(piece) ? 'red' : 'black';
-                        if (pieceColor !== playerSide) {
+                        const targetSide = r < 5 ? 'red' : 'black';
+                        const currentSide = row < 5 ? 'red' : 'black';
+                        
+                        if (targetSide !== currentSide) {
                             moves.push([r, c]);
                         }
                         break;
@@ -969,8 +978,9 @@
                 const [r, c] = moves[i];
                 const targetPiece = gameState[r][c];
                 if (targetPiece) {
-                    const targetColor = '車馬相仕帥炮兵'.includes(targetPiece) ? 'red' : 'black';
-                    if (targetColor === playerSide) {
+                    const targetSide = r < 5 ? 'red' : 'black';
+                    const currentSide = row < 5 ? 'red' : 'black';
+                    if (targetSide === currentSide) {
                         moves.splice(i, 1);
                     }
                 }
@@ -986,11 +996,10 @@
                 moves.push([toRow, toCol]);
                 return false; // 继续搜索
             } else {
-                const sourcePiece = gameState[fromRow][fromCol];
-                const sourceColor = '車馬相仕帥炮兵'.includes(sourcePiece) ? 'red' : 'black';
-                const targetColor = '車馬相仕帥炮兵'.includes(targetPiece) ? 'red' : 'black';
+                const sourceSide = fromRow < 5 ? 'red' : 'black';
+                const targetSide = toRow < 5 ? 'red' : 'black';
                 
-                if (sourceColor !== targetColor) {
+                if (sourceSide !== targetSide) {
                     moves.push([toRow, toCol]);
                 }
                 return true; // 停止搜索
@@ -1005,11 +1014,10 @@
             if (!targetPiece) {
                 moves.push([toRow, toCol]);
             } else {
-                const sourcePiece = gameState[fromRow][fromCol];
-                const sourceColor = '車馬相仕帥炮兵'.includes(sourcePiece) ? 'red' : 'black';
-                const targetColor = '車馬相仕帥炮兵'.includes(targetPiece) ? 'red' : 'black';
+                const sourceSide = fromRow < 5 ? 'red' : 'black';
+                const targetSide = toRow < 5 ? 'red' : 'black';
                 
-                if (sourceColor !== targetColor) {
+                if (sourceSide !== targetSide) {
                     moves.push([toRow, toCol]);
                 }
             }
