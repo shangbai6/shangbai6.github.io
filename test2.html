@@ -3,1064 +3,838 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>在线中国象棋</title>
+    <title>联机五子棋</title>
     <style>
         :root {
-            --board-color: #f2c078;
-            --grid-color: #804000;
-            --red-piece: #d9534f;
-            --black-piece: #292b2c;
-            --highlight: rgba(255, 255, 0, 0.5);
-            --possible-move: rgba(0, 255, 0, 0.3);
+            --primary-color: #4A90E2;
+            --secondary-color: #F5A623;
+            --bg-color: #f5f5f7;
+            --board-color: #E9B964;
+            --black-piece: #222;
+            --white-piece: #fff;
+            --border-radius: 8px;
         }
-        
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            font-family: "PingFang SC", "Helvetica Neue", Arial, sans-serif;
         }
-        
+
         body {
-            font-family: 'Microsoft YaHei', '宋体', sans-serif;
-            background-color: #f8f9fa;
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
+            background-color: var(--bg-color);
             color: #333;
-        }
-        
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
             padding: 20px;
-            width: 100%;
-        }
-        
-        header {
-            text-align: center;
-            padding: 20px 0;
-            background-color: #343a40;
-            color: white;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-        }
-        
-        h1 {
-            font-size: 2rem;
-            margin-bottom: 10px;
-        }
-        
-        .game-info {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-        
-        .player-info {
-            background-color: white;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-            flex: 1;
-            margin: 0 10px;
-            min-width: 200px;
-            margin-bottom: 10px;
-        }
-        
-        .game-status {
-            background-color: white;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-            flex: 2;
-            text-align: center;
-            margin: 0 10px;
-            margin-bottom: 10px;
-        }
-        
-        .game-container {
+            min-height: 100vh;
             display: flex;
             flex-direction: column;
             align-items: center;
         }
-        
+
+        .container {
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+            color: var(--primary-color);
+        }
+
+        .game-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            background: white;
+            padding: 15px;
+            border-radius: var(--border-radius);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .player {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+        }
+
+        .player-info {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        .player-piece {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 10px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+
+        .black {
+            background-color: var(--black-piece);
+        }
+
+        .white {
+            background-color: var(--white-piece);
+            border: 1px solid #ddd;
+        }
+
+        .active-player {
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+
+        .game-status {
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+            margin: 15px 0;
+        }
+
         .board-container {
             position: relative;
-            margin: 0 auto;
             width: 100%;
-            max-width: 450px;
-        }
-        
-        .board {
-            width: 100%;
-            padding-bottom: 111%; /* 9:10 ratio */
-            position: relative;
+            padding-bottom: 100%; /* 正方形 */
             background-color: var(--board-color);
-            border: 2px solid var(--grid-color);
-            border-radius: 4px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            border-radius: var(--border-radius);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
             overflow: hidden;
         }
-        
-        .grid {
+
+        .board {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
             display: grid;
-            grid-template-columns: repeat(9, 1fr);
-            grid-template-rows: repeat(10, 1fr);
+            grid-template-columns: repeat(15, 1fr);
+            grid-template-rows: repeat(15, 1fr);
+            padding: 10px;
         }
-        
-        .intersection {
+
+        .cell {
             position: relative;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            cursor: pointer;
         }
-        
-        .intersection:before {
+
+        .cell::before {
             content: "";
             position: absolute;
-            background-color: var(--grid-color);
-        }
-        
-        .vertical-line:before {
-            width: 2px;
-            height: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-        }
-        
-        .horizontal-line:before {
-            height: 2px;
-            width: 100%;
             top: 50%;
-            transform: translateY(-50%);
+            left: 0;
+            width: 100%;
+            height: 1px;
+            background-color: rgba(0, 0, 0, 0.5);
         }
-        
+
+        .cell::after {
+            content: "";
+            position: absolute;
+            left: 50%;
+            top: 0;
+            height: 100%;
+            width: 1px;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+
         .piece {
             position: absolute;
             width: 80%;
             height: 80%;
+            top: 10%;
+            left: 10%;
             border-radius: 50%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-weight: bold;
-            font-size: 1.3rem;
-            cursor: pointer;
+            z-index: 1;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
-            transition: transform 0.3s, box-shadow 0.3s;
-            z-index: 10;
+            transition: all 0.2s ease;
         }
-        
-        .piece:hover {
-            transform: scale(1.05);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
-        }
-        
-        .red-piece {
-            background-color: var(--red-piece);
-            color: white;
-        }
-        
-        .black-piece {
-            background-color: var(--black-piece);
-            color: white;
-        }
-        
-        .river {
-            position: absolute;
-            top: 45%;
-            left: 0;
-            width: 100%;
-            height: 10%;
-            background-color: rgba(100, 181, 246, 0.5);
-            z-index: 1;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            color: rgba(0, 0, 0, 0.6);
-            font-size: 1.5rem;
-        }
-        
-        .palace {
-            position: absolute;
-            width: 30%;
-            height: 30%;
-            border: 2px solid var(--grid-color);
-            z-index: 1;
-        }
-        
-        .black-palace {
-            top: 0;
-            left: 35%;
-        }
-        
-        .red-palace {
-            bottom: 0;
-            left: 35%;
-        }
-        
-        .diagonal-line {
-            position: absolute;
-            background-color: var(--grid-color);
-            height: 2px;
-            width: 141%; /* √2 * 100% */
-            z-index: 1;
-        }
-        
-        .diagonal-line-1 {
-            transform: rotate(45deg);
-        }
-        
-        .diagonal-line-2 {
-            transform: rotate(-45deg);
-        }
-        
-        .palace-center {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100%;
-        }
-        
-        .selected {
-            box-shadow: 0 0 0 3px var(--highlight);
-        }
-        
-        .possible-move {
-            position: absolute;
-            width: 30%;
-            height: 30%;
-            border-radius: 50%;
-            background-color: var(--possible-move);
-            z-index: 5;
-        }
-        
-        .game-controls {
-            display: flex;
-            justify-content: center;
+
+        .controls {
             margin-top: 20px;
-            flex-wrap: wrap;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
         }
-        
-        button {
-            background-color: #007bff;
+
+        .btn {
+            padding: 12px 20px;
+            background-color: var(--primary-color);
             color: white;
             border: none;
-            padding: 10px 20px;
-            margin: 5px;
-            border-radius: 4px;
+            border-radius: var(--border-radius);
             cursor: pointer;
-            font-size: 1rem;
-            transition: background-color 0.3s;
-        }
-        
-        button:hover {
-            background-color: #0069d9;
-        }
-        
-        .game-id {
-            margin-top: 20px;
-            text-align: center;
-            font-size: 1.2rem;
-            background-color: white;
-            padding: 10px;
-            border-radius: 4px;
+            font-size: 16px;
+            transition: background-color 0.2s;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            width: 100%;
         }
-        
-        #gameIdInput {
+
+        .btn:hover {
+            background-color: #3A80D2;
+        }
+
+        .btn.secondary {
+            background-color: var(--secondary-color);
+        }
+
+        .btn.secondary:hover {
+            background-color: #E59613;
+        }
+
+        .game-id {
+            margin-top: 15px;
+            padding: 15px;
+            background: white;
+            border-radius: var(--border-radius);
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .game-id input {
+            width: 100%;
             padding: 10px;
-            font-size: 1rem;
-            margin: 10px;
+            margin-top: 5px;
             border: 1px solid #ddd;
-            border-radius: 4px;
-            width: 200px;
+            border-radius: var(--border-radius);
+            text-align: center;
+            font-size: 16px;
         }
-        
-        @media (max-width: 768px) {
-            .board-container {
-                max-width: 360px;
-            }
-            
-            .piece {
-                font-size: 1rem;
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 0;
             }
             
             h1 {
-                font-size: 1.5rem;
-            }
-        }
-        
-        @media (max-width: 480px) {
-            .board-container {
-                max-width: 300px;
+                font-size: 24px;
             }
             
-            .piece {
-                font-size: 0.8rem;
-            }
-            
-            .game-info {
+            .controls {
                 flex-direction: column;
             }
             
-            .player-info, .game-status {
+            .btn {
                 margin: 5px 0;
             }
+        }
+
+        /* 模态框样式 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 10;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background-color: white;
+            padding: 20px;
+            border-radius: var(--border-radius);
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .modal-title {
+            font-size: 20px;
+            margin-bottom: 15px;
+            color: var(--primary-color);
+        }
+
+        .modal-body {
+            margin-bottom: 20px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
         }
     </style>
 </head>
 <body>
-    <header>
-        <h1>在线中国象棋</h1>
-        <p>与朋友一起对战</p>
-    </header>
-    
     <div class="container">
+        <header>
+            <h1>联机五子棋</h1>
+        </header>
+
         <div class="game-info">
-            <div class="player-info" id="player1">
-                <h3>玩家1（红方）</h3>
-                <p id="player1Name">等待加入...</p>
+            <div class="player">
+                <div class="player-info">
+                    <div class="player-piece black"></div>
+                    <span id="player1-name">玩家1</span>
+                </div>
+                <span id="player1-status"></span>
             </div>
-            
-            <div class="game-status">
-                <h3>游戏状态</h3>
-                <p id="gameStatus">等待开始...</p>
-                <p id="currentTurn">当前回合: 红方</p>
-            </div>
-            
-            <div class="player-info" id="player2">
-                <h3>玩家2（黑方）</h3>
-                <p id="player2Name">等待加入...</p>
+
+            <div class="player">
+                <div class="player-info">
+                    <div class="player-piece white"></div>
+                    <span id="player2-name">玩家2</span>
+                </div>
+                <span id="player2-status"></span>
             </div>
         </div>
-        
-        <div class="game-container">
-            <div class="board-container">
-                <div class="board">
-                    <div class="river">楚河 汉界</div>
-                    <div class="palace black-palace">
-                        <div class="diagonal-line diagonal-line-1"></div>
-                        <div class="diagonal-line diagonal-line-2"></div>
-                    </div>
-                    <div class="palace red-palace">
-                        <div class="diagonal-line diagonal-line-1"></div>
-                        <div class="diagonal-line diagonal-line-2"></div>
-                    </div>
-                    <div class="grid" id="chessboard"></div>
-                </div>
+
+        <div class="game-status" id="game-status">等待开始游戏...</div>
+
+        <div class="board-container">
+            <div class="board" id="board"></div>
+        </div>
+
+        <div class="controls">
+            <button class="btn" id="create-game">创建新游戏</button>
+            <button class="btn secondary" id="join-game">加入游戏</button>
+            <button class="btn" id="restart-game" style="display: none;">重新开始</button>
+        </div>
+
+        <div class="game-id" id="game-id-container" style="display: none;">
+            <div>游戏ID (分享给对手)</div>
+            <input type="text" id="game-id" readonly>
+        </div>
+
+        <div class="game-id" id="join-game-container" style="display: none;">
+            <div>输入游戏ID</div>
+            <input type="text" id="join-game-id">
+            <button class="btn" id="confirm-join" style="margin-top: 10px;">确认加入</button>
+        </div>
+    </div>
+
+    <div class="modal" id="name-modal">
+        <div class="modal-content">
+            <div class="modal-title">请输入您的名字</div>
+            <div class="modal-body">
+                <input type="text" id="player-name" placeholder="您的名字" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: var(--border-radius);">
             </div>
-            
-            <div class="game-controls">
-                <button id="newGameBtn">新游戏</button>
-                <button id="joinGameBtn">加入游戏</button>
-                <button id="restartBtn">重新开始</button>
-                <button id="resignBtn">认输</button>
-            </div>
-            
-            <div class="game-id">
-                <p>游戏ID: <span id="gameIdDisplay">未创建</span></p>
-                <div>
-                    <input type="text" id="gameIdInput" placeholder="输入游戏ID加入">
-                    <button id="connectBtn">连接</button>
-                </div>
+            <div class="modal-buttons">
+                <button class="btn" id="submit-name">确认</button>
             </div>
         </div>
     </div>
-    
+
+    <div class="modal" id="result-modal">
+        <div class="modal-content">
+            <div class="modal-title">游戏结果</div>
+            <div class="modal-body" id="result-message">
+                <!-- 结果信息将在这里显示 -->
+            </div>
+            <div class="modal-buttons">
+                <button class="btn" id="close-result">确认</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase -->
     <script type="module">
-      // Import the functions you need from the SDKs you need
-      import { initializeApp } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-app.js";
-      import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-analytics.js";
-      import { getDatabase, ref, set, onValue, push, child, update } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-database.js";
+        // Import the functions you need from the SDKs you need
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-analytics.js";
+        import { getDatabase, ref, set, onValue, update, push, child, get } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-database.js";
 
-      // Your web app's Firebase configuration
-      const firebaseConfig = {
-        apiKey: "AIzaSyAqbA4PN7uJr_lnIRHeqvvLJQXOHHoZW4E",
-        authDomain: "test-8a5cb.firebaseapp.com",
-        databaseURL: "https://test-8a5cb-default-rtdb.asia-southeast1.firebasedatabase.app",
-        projectId: "test-8a5cb",
-        storageBucket: "test-8a5cb.firebasestorage.app",
-        messagingSenderId: "227317352826",
-        appId: "1:227317352826:web:90d96f27a4dc5d96c16ec3",
-        measurementId: "G-EMJ5ZVJXBE"
-      };
-
-      // Initialize Firebase
-      const app = initializeApp(firebaseConfig);
-      const analytics = getAnalytics(app);
-      const database = getDatabase(app);
-      
-      // 游戏变量
-      let gameId = null;
-      let playerId = null;
-      let playerSide = null;
-      let currentTurn = 'red';
-      let selectedPiece = null;
-      let possibleMoves = [];
-      let gameState = {};
-      
-      // DOM 元素
-      const chessboard = document.getElementById('chessboard');
-      const gameStatus = document.getElementById('gameStatus');
-      const currentTurnDisplay = document.getElementById('currentTurn');
-      const gameIdDisplay = document.getElementById('gameIdDisplay');
-      const player1Name = document.getElementById('player1Name');
-      const player2Name = document.getElementById('player2Name');
-      const gameIdInput = document.getElementById('gameIdInput');
-      
-      // 按钮
-      const newGameBtn = document.getElementById('newGameBtn');
-      const joinGameBtn = document.getElementById('joinGameBtn');
-      const restartBtn = document.getElementById('restartBtn');
-      const resignBtn = document.getElementById('resignBtn');
-      const connectBtn = document.getElementById('connectBtn');
-      
-      // 象棋初始布局
-      const initialBoard = [
-        // 黑方 (上方)
-        {type: 'chariot', side: 'black', position: {row: 0, col: 0}, symbol: '車'},
-        {type: 'horse', side: 'black', position: {row: 0, col: 1}, symbol: '馬'},
-        {type: 'elephant', side: 'black', position: {row: 0, col: 2}, symbol: '象'},
-        {type: 'advisor', side: 'black', position: {row: 0, col: 3}, symbol: '士'},
-        {type: 'general', side: 'black', position: {row: 0, col: 4}, symbol: '將'},
-        {type: 'advisor', side: 'black', position: {row: 0, col: 5}, symbol: '士'},
-        {type: 'elephant', side: 'black', position: {row: 0, col: 6}, symbol: '象'},
-        {type: 'horse', side: 'black', position: {row: 0, col: 7}, symbol: '馬'},
-        {type: 'chariot', side: 'black', position: {row: 0, col: 8}, symbol: '車'},
-        {type: 'cannon', side: 'black', position: {row: 2, col: 1}, symbol: '砲'},
-        {type: 'cannon', side: 'black', position: {row: 2, col: 7}, symbol: '砲'},
-        {type: 'soldier', side: 'black', position: {row: 3, col: 0}, symbol: '卒'},
-        {type: 'soldier', side: 'black', position: {row: 3, col: 2}, symbol: '卒'},
-        {type: 'soldier', side: 'black', position: {row: 3, col: 4}, symbol: '卒'},
-        {type: 'soldier', side: 'black', position: {row: 3, col: 6}, symbol: '卒'},
-        {type: 'soldier', side: 'black', position: {row: 3, col: 8}, symbol: '卒'},
-        
-        // 红方 (下方)
-        {type: 'chariot', side: 'red', position: {row: 9, col: 0}, symbol: '俥'},
-        {type: 'horse', side: 'red', position: {row: 9, col: 1}, symbol: '傌'},
-        {type: 'elephant', side: 'red', position: {row: 9, col: 2}, symbol: '相'},
-        {type: 'advisor', side: 'red', position: {row: 9, col: 3}, symbol: '仕'},
-        {type: 'general', side: 'red', position: {row: 9, col: 4}, symbol: '帥'},
-        {type: 'advisor', side: 'red', position: {row: 9, col: 5}, symbol: '仕'},
-        {type: 'elephant', side: 'red', position: {row: 9, col: 6}, symbol: '相'},
-        {type: 'horse', side: 'red', position: {row: 9, col: 7}, symbol: '傌'},
-        {type: 'chariot', side: 'red', position: {row: 9, col: 8}, symbol: '俥'},
-        {type: 'cannon', side: 'red', position: {row: 7, col: 1}, symbol: '炮'},
-        {type: 'cannon', side: 'red', position: {row: 7, col: 7}, symbol: '炮'},
-        {type: 'soldier', side: 'red', position: {row: 6, col: 0}, symbol: '兵'},
-        {type: 'soldier', side: 'red', position: {row: 6, col: 2}, symbol: '兵'},
-        {type: 'soldier', side: 'red', position: {row: 6, col: 4}, symbol: '兵'},
-        {type: 'soldier', side: 'red', position: {row: 6, col: 6}, symbol: '兵'},
-        {type: 'soldier', side: 'red', position: {row: 6, col: 8}, symbol: '兵'}
-      ];
-      
-      // 创建棋盘格子
-      function createBoard() {
-        chessboard.innerHTML = '';
-        
-        for (let row = 0; row < 10; row++) {
-          for (let col = 0; col < 9; col++) {
-            const intersection = document.createElement('div');
-            intersection.className = 'intersection';
-            intersection.dataset.row = row;
-            intersection.dataset.col = col;
-            
-            // 添加水平线和垂直线
-            if (col < 8) intersection.classList.add('horizontal-line');
-            if (row < 9) intersection.classList.add('vertical-line');
-            
-            intersection.addEventListener('click', handleIntersectionClick);
-            chessboard.appendChild(intersection);
-          }
-        }
-      }
-      
-      // 放置棋子
-      function placePieces(pieces) {
-        // 清除现有棋子
-        const existingPieces = document.querySelectorAll('.piece');
-        existingPieces.forEach(piece => piece.remove());
-        
-        pieces.forEach(piece => {
-          const { row, col } = piece.position;
-          const pieceElement = document.createElement('div');
-          pieceElement.className = `piece ${piece.side}-piece`;
-          pieceElement.textContent = piece.symbol;
-          pieceElement.dataset.row = row;
-          pieceElement.dataset.col = col;
-          pieceElement.dataset.type = piece.type;
-          pieceElement.dataset.side = piece.side;
-          
-          const intersection = getIntersection(row, col);
-          if (intersection) {
-            intersection.appendChild(pieceElement);
-          }
-        });
-      }
-      
-      // 获取指定位置的交叉点
-      function getIntersection(row, col) {
-        return document.querySelector(`.intersection[data-row="${row}"][data-col="${col}"]`);
-      }
-      
-      // 获取指定位置的棋子
-      function getPieceAt(pieces, row, col) {
-        return pieces.find(p => p.position.row === row && p.position.col === col);
-      }
-      
-      // 处理交叉点点击
-      function handleIntersectionClick(event) {
-        if (!gameId || (playerSide !== currentTurn)) return;
-        
-        const row = parseInt(event.currentTarget.dataset.row);
-        const col = parseInt(event.currentTarget.dataset.col);
-        
-        // 检查是否已有选中的棋子
-        if (selectedPiece) {
-          const canMove = possibleMoves.some(move => move.row === row && move.col === col);
-          
-          if (canMove) {
-            // 移动棋子
-            const updatedPieces = gameState.pieces.map(piece => {
-              if (piece === selectedPiece) {
-                return { ...piece, position: { row, col } };
-              }
-              return piece;
-            });
-            
-            // 检查是否吃子
-            const targetIndex = gameState.pieces.findIndex(
-              p => p.position.row === row && p.position.col === col
-            );
-            
-            if (targetIndex !== -1) {
-              updatedPieces.splice(targetIndex, 1);
-            }
-            
-            // 更新游戏状态
-            const newTurn = currentTurn === 'red' ? 'black' : 'red';
-            updateGame(updatedPieces, newTurn);
-          }
-          
-          // 清除选择状态
-          clearSelection();
-          return;
-        }
-        
-        // 检查是否选中了棋子
-        const clickedPiece = gameState.pieces.find(
-          piece => piece.position.row === row && piece.position.col === col && piece.side === playerSide
-        );
-        
-        if (clickedPiece) {
-          // 选中棋子
-          selectedPiece = clickedPiece;
-          highlightPiece(row, col);
-          showPossibleMoves(clickedPiece);
-        }
-      }
-      
-      // 高亮选中的棋子
-      function highlightPiece(row, col) {
-        const pieceElement = document.querySelector(`.piece[data-row="${row}"][data-col="${col}"]`);
-        if (pieceElement) {
-          pieceElement.classList.add('selected');
-        }
-      }
-      
-      // 显示可能的移动位置
-      function showPossibleMoves(piece) {
-        possibleMoves = calculatePossibleMoves(piece, gameState.pieces);
-        
-        possibleMoves.forEach(move => {
-          const intersection = getIntersection(move.row, move.col);
-          if (intersection) {
-            const moveMarker = document.createElement('div');
-            moveMarker.className = 'possible-move';
-            moveMarker.dataset.row = move.row;
-            moveMarker.dataset.col = move.col;
-            intersection.appendChild(moveMarker);
-          }
-        });
-      }
-      
-      // 计算可能的移动位置（根据棋子类型）
-      function calculatePossibleMoves(piece, allPieces) {
-        const { type, side, position } = piece;
-        const { row, col } = position;
-        const moves = [];
-        
-        // 根据不同棋子类型计算可能的移动
-        switch (type) {
-          case 'soldier': // 兵/卒
-            // 红方兵向上移动
-            if (side === 'red') {
-              // 未过河
-              if (row > 4) {
-                addMoveIfValid(moves, row - 1, col, side, allPieces);
-              } else {
-                // 过河后可以左右移动
-                addMoveIfValid(moves, row - 1, col, side, allPieces);
-                addMoveIfValid(moves, row, col - 1, side, allPieces);
-                addMoveIfValid(moves, row, col + 1, side, allPieces);
-              }
-            } else {
-              // 黑方卒向下移动
-              if (row < 5) {
-                addMoveIfValid(moves, row + 1, col, side, allPieces);
-              } else {
-                // 过河后可以左右移动
-                addMoveIfValid(moves, row + 1, col, side, allPieces);
-                addMoveIfValid(moves, row, col - 1, side, allPieces);
-                addMoveIfValid(moves, row, col + 1, side, allPieces);
-              }
-            }
-            break;
-            
-          case 'cannon': // 炮
-            // 横向移动
-            for (let c = col - 1; c >= 0; c--) {
-              if (!addCannonMove(moves, row, c, side, allPieces)) break;
-            }
-            
-            for (let c = col + 1; c < 9; c++) {
-              if (!addCannonMove(moves, row, c, side, allPieces)) break;
-            }
-            
-            // 纵向移动
-            for (let r = row - 1; r >= 0; r--) {
-              if (!addCannonMove(moves, r, col, side, allPieces)) break;
-            }
-            
-            for (let r = row + 1; r < 10; r++) {
-              if (!addCannonMove(moves, r, col, side, allPieces)) break;
-            }
-            break;
-            
-          case 'chariot': // 车/俥
-            // 横向移动
-            for (let c = col - 1; c >= 0; c--) {
-              if (!addStraightMove(moves, row, c, side, allPieces)) break;
-            }
-            
-            for (let c = col + 1; c < 9; c++) {
-              if (!addStraightMove(moves, row, c, side, allPieces)) break;
-            }
-            
-            // 纵向移动
-            for (let r = row - 1; r >= 0; r--) {
-              if (!addStraightMove(moves, r, col, side, allPieces)) break;
-            }
-            
-            for (let r = row + 1; r < 10; r++) {
-              if (!addStraightMove(moves, r, col, side, allPieces)) break;
-            }
-            break;
-            
-          case 'horse': // 马/傌
-            // 马走"日"字
-            const horseDirections = [
-              { dr: -2, dc: -1 }, { dr: -2, dc: 1 },
-              { dr: -1, dc: -2 }, { dr: -1, dc: 2 },
-              { dr: 1, dc: -2 }, { dr: 1, dc: 2 },
-              { dr: 2, dc: -1 }, { dr: 2, dc: 1 }
-            ];
-            
-            horseDirections.forEach(dir => {
-              const newRow = row + dir.dr;
-              const newCol = col + dir.dc;
-              
-              // 检查马腿是否被堵
-              const legRow = row + Math.sign(dir.dr);
-              const legCol = col + Math.sign(dir.dc);
-              
-              if (Math.abs(dir.dr) === 2) {
-                // 纵向移动时，检查纵向的马腿
-                if (!getPieceAt(allPieces, legRow, col)) {
-                  addMoveIfValid(moves, newRow, newCol, side, allPieces);
-                }
-              } else {
-                // 横向移动时，检查横向的马腿
-                if (!getPieceAt(allPieces, row, legCol)) {
-                  addMoveIfValid(moves, newRow, newCol, side, allPieces);
-                }
-              }
-            });
-            break;
-            
-          case 'elephant': // 象/相
-            // 象走"田"字
-            const elephantDirections = [
-              { dr: -2, dc: -2 }, { dr: -2, dc: 2 },
-              { dr: 2, dc: -2 }, { dr: 2, dc: 2 }
-            ];
-            
-            elephantDirections.forEach(dir => {
-              const newRow = row + dir.dr;
-              const newCol = col + dir.dc;
-              
-              // 检查象腿是否被堵
-              const legRow = row + dir.dr / 2;
-              const legCol = col + dir.dc / 2;
-              
-              // 检查是否过河
-              const canCrossRiver = (side === 'red' && newRow >= 5) || (side === 'black' && newRow <= 4);
-              
-              if (canCrossRiver && !getPieceAt(allPieces, legRow, legCol)) {
-                addMoveIfValid(moves, newRow, newCol, side, allPieces);
-              }
-            });
-            break;
-            
-          case 'advisor': // 士/仕
-            // 士走斜线
-            const advisorDirections = [
-              { dr: -1, dc: -1 }, { dr: -1, dc: 1 },
-              { dr: 1, dc: -1 }, { dr: 1, dc: 1 }
-            ];
-            
-            advisorDirections.forEach(dir => {
-              const newRow = row + dir.dr;
-              const newCol = col + dir.dc;
-              
-              // 检查是否在九宫格内
-              const inPalace = isInPalace(newRow, newCol, side);
-              
-              if (inPalace) {
-                addMoveIfValid(moves, newRow, newCol, side, allPieces);
-              }
-            });
-            break;
-            
-          case 'general': // 将/帅
-            // 将走直线
-            const generalDirections = [
-              { dr: -1, dc: 0 }, { dr: 1, dc: 0 },
-              { dr: 0, dc: -1 }, { dr: 0, dc: 1 }
-            ];
-            
-            generalDirections.forEach(dir => {
-              const newRow = row + dir.dr;
-              const newCol = col + dir.dc;
-              
-              // 检查是否在九宫格内
-              const inPalace = isInPalace(newRow, newCol, side);
-              
-              if (inPalace) {
-                addMoveIfValid(moves, newRow, newCol, side, allPieces);
-              }
-            });
-            
-            // 将帅对面时可以直接吃对方
-            const opposingGeneral = allPieces.find(p => 
-              p.type === 'general' && p.side !== side
-            );
-            
-            if (opposingGeneral && opposingGeneral.position.col === col) {
-              let hasObstacle = false;
-              const startRow = Math.min(row, opposingGeneral.position.row);
-              const endRow = Math.max(row, opposingGeneral.position.row);
-              
-              for (let r = startRow + 1; r < endRow; r++) {
-                if (getPieceAt(allPieces, r, col)) {
-                  hasObstacle = true;
-                  break;
-                }
-              }
-              
-              if (!hasObstacle) {
-                addMoveIfValid(moves, opposingGeneral.position.row, opposingGeneral.position.col, side, allPieces);
-              }
-            }
-            break;
-        }
-        
-        return moves;
-      }
-      
-      // 添加移动（如果有效）
-      function addMoveIfValid(moves, row, col, side, pieces) {
-        // 检查是否在棋盘内
-        if (row < 0 || row > 9 || col < 0 || col > 8) return false;
-        
-        const pieceAtTarget = getPieceAt(pieces, row, col);
-        
-        // 如果目标位置为空或有对方棋子
-        if (!pieceAtTarget || pieceAtTarget.side !== side) {
-          moves.push({ row, col });
-          return true;
-        }
-        
-        return false;
-      }
-      
-      // 添加炮的移动
-      function addCannonMove(moves, row, col, side, pieces) {
-        // 检查是否在棋盘内
-        if (row < 0 || row > 9 || col < 0 || col > 8) return false;
-        
-        const pieceAtTarget = getPieceAt(pieces, row, col);
-        
-        if (!pieceAtTarget) {
-          // 空位置可以移动
-          moves.push({ row, col });
-          return true;
-        } else {
-          // 有棋子，需要再越过一个棋子才能吃子
-          return false;
-        }
-      }
-      
-      // 添加直线移动
-      function addStraightMove(moves, row, col, side, pieces) {
-        // 检查是否在棋盘内
-        if (row < 0 || row > 9 || col < 0 || col > 8) return false;
-        
-        const pieceAtTarget = getPieceAt(pieces, row, col);
-        
-        if (!pieceAtTarget) {
-          // 空位置可以移动
-          moves.push({ row, col });
-          return true;
-        } else if (pieceAtTarget.side !== side) {
-          // 对方棋子可以吃
-          moves.push({ row, col });
-          return false;
-        } else {
-          // 己方棋子不能移动到该位置
-          return false;
-        }
-      }
-      
-      // 判断是否在九宫格内
-      function isInPalace(row, col, side) {
-        if (col < 3 || col > 5) return false;
-        
-        if (side === 'red') {
-          return row >= 7 && row <= 9;
-        } else {
-          return row >= 0 && row <= 2;
-        }
-      }
-      
-      // 清除选择状态
-      function clearSelection() {
-        selectedPiece = null;
-        possibleMoves = [];
-        
-        const selectedPieces = document.querySelectorAll('.piece.selected');
-        selectedPieces.forEach(piece => piece.classList.remove('selected'));
-        
-        const moveMarkers = document.querySelectorAll('.possible-move');
-        moveMarkers.forEach(marker => marker.remove());
-      }
-      
-      // 创建新游戏
-      function createNewGame() {
-        playerId = generateId();
-        playerSide = 'red';
-        
-        const gameRef = push(ref(database, 'games'));
-        gameId = gameRef.key;
-        
-        const newGame = {
-          pieces: initialBoard,
-          players: {
-            red: playerId,
-            black: null
-          },
-          currentTurn: 'red',
-          status: 'waiting',
-          lastUpdated: Date.now()
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyAqbA4PN7uJr_lnIRHeqvvLJQXOHHoZW4E",
+            authDomain: "test-8a5cb.firebaseapp.com",
+            databaseURL: "https://test-8a5cb-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "test-8a5cb",
+            storageBucket: "test-8a5cb.firebasestorage.app",
+            messagingSenderId: "227317352826",
+            appId: "1:227317352826:web:90d96f27a4dc5d96c16ec3",
+            measurementId: "G-EMJ5ZVJXBE"
         };
-        
-        set(gameRef, newGame)
-          .then(() => {
-            gameIdDisplay.textContent = gameId;
-            player1Name.textContent = '你 (红方)';
-            player2Name.textContent = '等待对手加入...';
-            gameStatus.textContent = '等待对手加入...';
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const analytics = getAnalytics(app);
+        const database = getDatabase(app);
+
+        // DOM 元素
+        const board = document.getElementById('board');
+        const gameStatus = document.getElementById('game-status');
+        const player1Name = document.getElementById('player1-name');
+        const player2Name = document.getElementById('player2-name');
+        const player1Status = document.getElementById('player1-status');
+        const player2Status = document.getElementById('player2-status');
+        const createGameBtn = document.getElementById('create-game');
+        const joinGameBtn = document.getElementById('join-game');
+        const restartGameBtn = document.getElementById('restart-game');
+        const gameIdContainer = document.getElementById('game-id-container');
+        const gameIdInput = document.getElementById('game-id');
+        const joinGameContainer = document.getElementById('join-game-container');
+        const joinGameIdInput = document.getElementById('join-game-id');
+        const confirmJoinBtn = document.getElementById('confirm-join');
+        const nameModal = document.getElementById('name-modal');
+        const playerNameInput = document.getElementById('player-name');
+        const submitNameBtn = document.getElementById('submit-name');
+        const resultModal = document.getElementById('result-modal');
+        const resultMessage = document.getElementById('result-message');
+        const closeResultBtn = document.getElementById('close-result');
+
+        // 游戏状态变量
+        let currentGame = null;
+        let playerName = localStorage.getItem('playerName') || '';
+        let playerId = localStorage.getItem('playerId') || generatePlayerId();
+        let playerRole = null; // 'player1' 或 'player2'
+        let boardState = Array(15).fill().map(() => Array(15).fill(null));
+        let currentTurn = 'player1'; // 黑棋先行
+
+        // 初始化
+        initialize();
+
+        function initialize() {
+            createBoard();
+            setupEventListeners();
             
-            // 监听游戏变化
-            listenToGameChanges();
-          })
-          .catch(error => {
-            console.error('创建游戏失败:', error);
-            gameStatus.textContent = '创建游戏失败，请重试。';
-          });
-      }
-      
-      // 加入游戏
-      function joinGame(id) {
-        if (!id) {
-          gameStatus.textContent = '请输入有效的游戏ID';
-          return;
+            // 如果本地存储中没有玩家名称，则显示输入模态框
+            if (!playerName) {
+                nameModal.style.display = 'flex';
+            }
+            
+            // 保存玩家ID到本地存储
+            localStorage.setItem('playerId', playerId);
         }
-        
-        playerId = generateId();
-        gameId = id;
-        
-        const gameRef = ref(database, `games/${gameId}`);
-        
-        onValue(gameRef, (snapshot) => {
-          const data = snapshot.val();
-          
-          if (!data) {
-            gameStatus.textContent = '游戏不存在';
-            return;
-          }
-          
-          if (data.players.black !== null && data.players.black !== playerId) {
-            gameStatus.textContent = '游戏已满';
-            return;
-          }
-          
-          if (data.players.red === playerId) {
-            // 已经是红方玩家
-            playerSide = 'red';
-            player1Name.textContent = '你 (红方)';
-            player2Name.textContent = data.players.black ? '对手 (黑方)' : '等待对手加入...';
-          } else {
-            // 加入为黑方
-            playerSide = 'black';
-            player1Name.textContent = '对手 (红方)';
-            player2Name.textContent = '你 (黑方)';
+
+        function createBoard() {
+            board.innerHTML = '';
+            for (let i = 0; i < 15; i++) {
+                for (let j = 0; j < 15; j++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.row = i;
+                    cell.dataset.col = j;
+                    board.appendChild(cell);
+                }
+            }
+        }
+
+        function setupEventListeners() {
+            // 棋盘点击事件
+            board.addEventListener('click', handleBoardClick);
             
-            // 更新游戏状态
-            update(gameRef, {
-              players: {
-                red: data.players.red,
-                black: playerId
-              },
-              status: 'playing'
+            // 创建游戏按钮
+            createGameBtn.addEventListener('click', createGame);
+            
+            // 加入游戏按钮
+            joinGameBtn.addEventListener('click', () => {
+                joinGameContainer.style.display = 'block';
+                gameIdContainer.style.display = 'none';
             });
-          }
-          
-          gameIdDisplay.textContent = gameId;
-          listenToGameChanges();
-        }, {
-          onlyOnce: true
-        });
-      }
-      
-      // 监听游戏变化
-      function listenToGameChanges() {
-        const gameRef = ref(database, `games/${gameId}`);
-        
-        onValue(gameRef, (snapshot) => {
-          const data = snapshot.val();
-          
-          if (!data) {
-            gameStatus.textContent = '游戏不存在或已结束';
-            return;
-          }
-          
-          gameState = data;
-          currentTurn = data.currentTurn;
-          
-          // 更新UI
-          updateGameUI(data);
-          
-          // 放置棋子
-          placePieces(data.pieces);
-          
-          // 清除选择状态
-          clearSelection();
-        });
-      }
-      
-      // 更新游戏状态
-      function updateGame(pieces, turn) {
-        if (!gameId) return;
-        
-        const gameRef = ref(database, `games/${gameId}`);
-        
-        update(gameRef, {
-          pieces: pieces,
-          currentTurn: turn,
-          lastUpdated: Date.now()
-        });
-      }
-      
-      // 更新游戏UI
-      function updateGameUI(data) {
-        // 更新回合显示
-        currentTurnDisplay.textContent = `当前回合: ${data.currentTurn === 'red' ? '红方' : '黑方'}`;
-        
-        // 更新状态显示
-        if (data.status === 'waiting') {
-          gameStatus.textContent = '等待对手加入...';
-        } else if (data.status === 'playing') {
-          gameStatus.textContent = '游戏进行中';
-          
-          // 检查是否轮到当前玩家
-          if (playerSide === data.currentTurn) {
-            gameStatus.textContent = '轮到你了';
-          } else {
-            gameStatus.textContent = '等待对手走棋...';
-          }
-          
-          // 更新玩家名称
-          if (playerSide === 'red') {
-            player1Name.textContent = '你 (红方)';
-            player2Name.textContent = '对手 (黑方)';
-          } else {
-            player1Name.textContent = '对手 (红方)';
-            player2Name.textContent = '你 (黑方)';
-          }
-        } else if (data.status === 'ended') {
-          gameStatus.textContent = `游戏结束，${data.winner === 'red' ? '红方' : '黑方'}获胜!`;
+            
+            // 确认加入游戏按钮
+            confirmJoinBtn.addEventListener('click', () => {
+                const gameId = joinGameIdInput.value.trim();
+                if (gameId) {
+                    joinGame(gameId);
+                }
+            });
+            
+            // 重新开始游戏按钮
+            restartGameBtn.addEventListener('click', restartGame);
+            
+            // 提交名称按钮
+            submitNameBtn.addEventListener('click', () => {
+                playerName = playerNameInput.value.trim() || '玩家' + Math.floor(Math.random() * 1000);
+                localStorage.setItem('playerName', playerName);
+                nameModal.style.display = 'none';
+                
+                // 如果已经在游戏中，更新玩家名称
+                if (currentGame && playerRole) {
+                    update(ref(database, `games/${currentGame}/${playerRole}`), {
+                        name: playerName
+                    });
+                }
+            });
+            
+            // 关闭结果模态框按钮
+            closeResultBtn.addEventListener('click', () => {
+                resultModal.style.display = 'none';
+            });
         }
-      }
-      
-      // 认输
-      function resign() {
-        if (!gameId || !playerSide) return;
-        
-        const gameRef = ref(database, `games/${gameId}`);
-        
-        update(gameRef, {
-          status: 'ended',
-          winner: playerSide === 'red' ? 'black' : 'red'
-        });
-      }
-      
-      // 重新开始游戏
-      function restartGame() {
-        if (!gameId) return;
-        
-        const gameRef = ref(database, `games/${gameId}`);
-        
-        update(gameRef, {
-          pieces: initialBoard,
-          currentTurn: 'red',
-          status: 'playing',
-          lastUpdated: Date.now()
-        });
-      }
-      
-      // 生成唯一ID
-      function generateId() {
-        return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-      }
-      
-      // 事件监听
-      newGameBtn.addEventListener('click', createNewGame);
-      connectBtn.addEventListener('click', () => joinGame(gameIdInput.value));
-      joinGameBtn.addEventListener('click', () => {
-        gameIdInput.focus();
-      });
-      restartBtn.addEventListener('click', restartGame);
-      resignBtn.addEventListener('click', resign);
-      
-      // 初始化棋盘
-      createBoard();
+
+        async function createGame() {
+            // 创建新游戏引用
+            const newGameRef = push(ref(database, 'games'));
+            const gameId = newGameRef.key;
+            
+            // 初始化游戏状态
+            await set(newGameRef, {
+                board: createEmptyBoard(),
+                currentTurn: 'player1',
+                status: 'waiting',
+                player1: {
+                    id: playerId,
+                    name: playerName || '玩家1',
+                    online: true
+                }
+            });
+            
+            // 设置当前游戏和玩家角色
+            currentGame = gameId;
+            playerRole = 'player1';
+            
+            // 显示游戏ID
+            gameIdInput.value = gameId;
+            gameIdContainer.style.display = 'block';
+            joinGameContainer.style.display = 'none';
+            
+            // 添加游戏状态监听
+            monitorGameState(gameId);
+            
+            // 设置在线状态和断开连接处理
+            setupPresence(gameId);
+            
+            // 更新UI
+            gameStatus.textContent = '等待对手加入...';
+            createGameBtn.style.display = 'none';
+            joinGameBtn.style.display = 'none';
+            restartGameBtn.style.display = 'block';
+        }
+
+        async function joinGame(gameId) {
+            // 检查游戏是否存在
+            const gameRef = ref(database, `games/${gameId}`);
+            const snapshot = await get(gameRef);
+            
+            if (!snapshot.exists()) {
+                alert('游戏不存在!');
+                return;
+            }
+            
+            const gameData = snapshot.val();
+            
+            // 检查游戏是否已满
+            if (gameData.player2 && gameData.player2.id && gameData.player2.id !== playerId) {
+                alert('游戏已满!');
+                return;
+            }
+            
+            // 如果是游戏创建者重新加入
+            if (gameData.player1 && gameData.player1.id === playerId) {
+                currentGame = gameId;
+                playerRole = 'player1';
+                
+                // 更新在线状态
+                await update(ref(database, `games/${gameId}/player1`), {
+                    online: true
+                });
+            } 
+            // 如果是第二个玩家重新加入
+            else if (gameData.player2 && gameData.player2.id === playerId) {
+                currentGame = gameId;
+                playerRole = 'player2';
+                
+                // 更新在线状态
+                await update(ref(database, `games/${gameId}/player2`), {
+                    online: true
+                });
+            } 
+            // 新玩家加入成为第二个玩家
+            else {
+                currentGame = gameId;
+                playerRole = 'player2';
+                
+                // 更新游戏状态
+                await update(ref(database, `games/${gameId}`), {
+                    status: 'playing',
+                    player2: {
+                        id: playerId,
+                        name: playerName || '玩家2',
+                        online: true
+                    }
+                });
+            }
+            
+            // 添加游戏状态监听
+            monitorGameState(gameId);
+            
+            // 设置在线状态和断开连接处理
+            setupPresence(gameId);
+            
+            // 更新UI
+            joinGameContainer.style.display = 'none';
+            gameIdContainer.style.display = 'none';
+            createGameBtn.style.display = 'none';
+            joinGameBtn.style.display = 'none';
+            restartGameBtn.style.display = 'block';
+        }
+
+        function monitorGameState(gameId) {
+            // 监听游戏状态变化
+            onValue(ref(database, `games/${gameId}`), (snapshot) => {
+                if (!snapshot.exists()) {
+                    return;
+                }
+                
+                const gameData = snapshot.val();
+                
+                // 更新UI和游戏状态
+                updateGameUI(gameData);
+                
+                // 更新本地棋盘状态
+                boardState = gameData.board || createEmptyBoard();
+                currentTurn = gameData.currentTurn || 'player1';
+                
+                // 检查游戏结果
+                if (gameData.status === 'ended' && gameData.winner) {
+                    const winnerName = gameData.winner === 'player1' 
+                        ? (gameData.player1?.name || '玩家1') 
+                        : (gameData.player2?.name || '玩家2');
+                    
+                    showResult(`${winnerName} 赢得了游戏!`);
+                } else if (gameData.status === 'ended' && gameData.draw) {
+                    showResult('游戏和局!');
+                }
+            });
+        }
+
+        function updateGameUI(gameData) {
+            // 更新玩家信息
+            if (gameData.player1) {
+                player1Name.textContent = gameData.player1.name || '玩家1';
+                player1Status.textContent = gameData.player1.online ? '在线' : '离线';
+                player1Status.style.color = gameData.player1.online ? '#4CAF50' : '#F44336';
+            }
+            
+            if (gameData.player2) {
+                player2Name.textContent = gameData.player2.name || '玩家2';
+                player2Status.textContent = gameData.player2.online ? '在线' : '离线';
+                player2Status.style.color = gameData.player2.online ? '#4CAF50' : '#F44336';
+            } else {
+                player2Name.textContent = '等待加入';
+                player2Status.textContent = '';
+            }
+            
+            // 更新游戏状态文本
+            if (gameData.status === 'waiting') {
+                gameStatus.textContent = '等待对手加入...';
+            } else if (gameData.status === 'playing') {
+                const currentPlayerName = gameData.currentTurn === 'player1' 
+                    ? (gameData.player1?.name || '玩家1') 
+                    : (gameData.player2?.name || '玩家2');
+                
+                gameStatus.textContent = `${currentPlayerName} 的回合`;
+                
+                // 高亮当前玩家
+                player1Name.classList.toggle('active-player', gameData.currentTurn === 'player1');
+                player2Name.classList.toggle('active-player', gameData.currentTurn === 'player2');
+            } else if (gameData.status === 'ended') {
+                if (gameData.winner) {
+                    const winnerName = gameData.winner === 'player1' 
+                        ? (gameData.player1?.name || '玩家1') 
+                        : (gameData.player2?.name || '玩家2');
+                    
+                    gameStatus.textContent = `游戏结束，${winnerName} 获胜!`;
+                } else {
+                    gameStatus.textContent = '游戏结束，和局!';
+                }
+            }
+            
+            // 更新棋盘显示
+            updateBoardDisplay(gameData.board);
+        }
+
+        function updateBoardDisplay(boardData) {
+            if (!boardData) return;
+            
+            // 清除所有棋子
+            const pieces = document.querySelectorAll('.piece');
+            pieces.forEach(piece => piece.remove());
+            
+            // 根据棋盘数据添加棋子
+            for (let i = 0; i < boardData.length; i++) {
+                for (let j = 0; j < boardData[i].length; j++) {
+                    if (boardData[i][j]) {
+                        const cell = document.querySelector(`.cell[data-row="${i}"][data-col="${j}"]`);
+                        const piece = document.createElement('div');
+                        piece.className = `piece ${boardData[i][j] === 'player1' ? 'black' : 'white'}`;
+                        cell.appendChild(piece);
+                    }
+                }
+            }
+        }
+
+        async function handleBoardClick(event) {
+            if (!currentGame || !playerRole) return;
+            
+            const cell = event.target.closest('.cell');
+            if (!cell) return;
+            
+            const row = parseInt(cell.dataset.row);
+            const col = parseInt(cell.dataset.col);
+            
+            // 获取当前游戏状态
+            const snapshot = await get(ref(database, `games/${currentGame}`));
+            if (!snapshot.exists()) return;
+            
+            const gameData = snapshot.val();
+            
+            // 检查是否可以落子
+            if (gameData.status !== 'playing' || 
+                gameData.currentTurn !== playerRole || 
+                gameData.board[row][col] !== null) {
+                return;
+            }
+            
+            // 更新棋盘状态
+            const newBoard = [...gameData.board];
+            newBoard[row][col] = playerRole;
+            
+            // 检查是否获胜
+            const isWinner = checkWin(newBoard, row, col, playerRole);
+            
+            // 检查是否和局
+            const isDraw = checkDraw(newBoard);
+            
+            if (isWinner) {
+                // 更新游戏状态 - 获胜
+                await update(ref(database, `games/${currentGame}`), {
+                    board: newBoard,
+                    status: 'ended',
+                    winner: playerRole
+                });
+            } else if (isDraw) {
+                // 更新游戏状态 - 和局
+                await update(ref(database, `games/${currentGame}`), {
+                    board: newBoard,
+                    status: 'ended',
+                    draw: true
+                });
+            } else {
+                // 更新游戏状态 - 切换玩家
+                await update(ref(database, `games/${currentGame}`), {
+                    board: newBoard,
+                    currentTurn: playerRole === 'player1' ? 'player2' : 'player1'
+                });
+            }
+        }
+
+        function checkWin(board, row, col, player) {
+            const directions = [
+                [0, 1],   // 水平
+                [1, 0],   // 垂直
+                [1, 1],   // 对角线 \
+                [1, -1]   // 对角线 /
+            ];
+            
+            for (const [dx, dy] of directions) {
+                let count = 1;
+                
+                // 正方向检查
+                for (let i = 1; i <= 4; i++) {
+                    const newRow = row + i * dx;
+                    const newCol = col + i * dy;
+                    
+                    if (newRow < 0 || newRow >= 15 || newCol < 0 || newCol >= 15 || 
+                        board[newRow][newCol] !== player) {
+                        break;
+                    }
+                    
+                    count++;
+                }
+                
+                // 反方向检查
+                for (let i = 1; i <= 4; i++) {
+                    const newRow = row - i * dx;
+                    const newCol = col - i * dy;
+                    
+                    if (newRow < 0 || newRow >= 15 || newCol < 0 || newCol >= 15 || 
+                        board[newRow][newCol] !== player) {
+                        break;
+                    }
+                    
+                    count++;
+                }
+                
+                if (count >= 5) {
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+
+        function checkDraw(board) {
+            for (let i = 0; i < board.length; i++) {
+                for (let j = 0; j < board[i].length; j++) {
+                    if (board[i][j] === null) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        async function restartGame() {
+            if (!currentGame) return;
+            
+            // 重置游戏状态
+            await update(ref(database, `games/${currentGame}`), {
+                board: createEmptyBoard(),
+                currentTurn: 'player1',
+                status: 'playing',
+                winner: null,
+                draw: null
+            });
+        }
+
+        function setupPresence(gameId) {
+            // 设置在线状态
+            const presenceRef = ref(database, `games/${gameId}/${playerRole}/online`);
+            
+            // 当连接断开时设置为离线
+            const connectedRef = ref(database, '.info/connected');
+            onValue(connectedRef, (snap) => {
+                if (snap.val() === true) {
+                    // 连接时设置为在线
+                    set(presenceRef, true);
+                    
+                    // 当断开连接时自动设置为离线
+                    onDisconnect(presenceRef).set(false);
+                }
+            });
+        }
+
+        function showResult(message) {
+            resultMessage.textContent = message;
+            resultModal.style.display = 'flex';
+        }
+
+        function createEmptyBoard() {
+            return Array(15).fill().map(() => Array(15).fill(null));
+        }
+
+        function generatePlayerId() {
+            return 'player_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        // 断开连接处理函数
+        function onDisconnect(ref) {
+            return {
+                set: (value) => {
+                    // 模拟 Firebase onDisconnect 功能
+                    window.addEventListener('beforeunload', () => {
+                        set(ref, value);
+                    });
+                }
+            };
+        }
     </script>
 </body>
 </html>
