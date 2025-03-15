@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Online Gomoku</title>
+    <title>在线五子棋</title>
     <style>
         * {
             margin: 0;
@@ -155,17 +155,17 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Online Gomoku (Five in a Row)</h1>
+            <h1>在线五子棋</h1>
         </div>
 
         <div class="status-message" id="statusMessage">
             <div class="loading-spinner"></div>
-            Connecting to server...
+            连接服务器中...
         </div>
 
         <div class="game-info">
-            <div>Player: <span id="playerInfo">Connecting...</span></div>
-            <div>Turn: <span id="turnInfo">-</span></div>
+            <div>玩家: <span id="playerInfo">连接中...</span></div>
+            <div>回合: <span id="turnInfo">-</span></div>
         </div>
 
         <div class="board-container">
@@ -175,25 +175,26 @@
         </div>
 
         <div class="controls">
-            <button id="newGameBtn" disabled>Create New Game</button>
+            <button id="newGameBtn" disabled>创建新游戏</button>
             <div style="display: flex; gap: 10px;">
-                <input type="text" id="joinGameId" placeholder="Game ID" style="flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px;">
-                <button id="joinGameBtn" disabled>Join Game</button>
+                <input type="text" id="joinGameId" placeholder="游戏ID" style="flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px;">
+                <button id="joinGameBtn" disabled>加入游戏</button>
             </div>
+            <button id="leaveGameBtn" disabled>离开游戏</button>
         </div>
 
         <div class="game-id-container">
-            <div>Game ID: <span id="gameIdDisplay">-</span></div>
-            <button id="copyIdBtn" style="margin-top: 5px; background-color: #6c757d;">Copy Game ID</button>
+            <div>游戏ID: <span id="gameIdDisplay">-</span></div>
+            <button id="copyIdBtn" style="margin-top: 5px; background-color: #6c757d;">复制游戏ID</button>
         </div>
     </div>
 
     <script type="module">
-        // Import Firebase modules from the provided configuration
+        // 导入Firebase模块
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-app.js";
-        import { getDatabase, ref, set, onValue, update, get, push } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-database.js";
+        import { getDatabase, ref, set, onValue, update, get, push, remove, onDisconnect } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-database.js";
 
-        // Your Firebase configuration from the user's provided code
+        // Firebase配置
         const firebaseConfig = {
             apiKey: "AIzaSyAqbA4PN7uJr_lnIRHeqvvLJQXOHHoZW4E",
             authDomain: "test-8a5cb.firebaseapp.com",
@@ -205,26 +206,27 @@
             measurementId: "G-EMJ5ZVJXBE"
         };
 
-        // Initialize Firebase
+        // 初始化Firebase
         const app = initializeApp(firebaseConfig);
         const database = getDatabase(app);
 
-        // Game constants
-        const BOARD_SIZE = 15; // 15x15 standard Gomoku board
+        // 游戏常量
+        const BOARD_SIZE = 15; // 15x15标准五子棋棋盘
         const EMPTY = 0;
         const BLACK = 1;
         const WHITE = 2;
 
-        // Game state
+        // 游戏状态
         let gameId = null;
         let playerId = null;
         let playerColor = null;
         let currentGameRef = null;
+        let isPlayerConnected = false;
         let gameBoard = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(EMPTY));
-        let currentTurn = BLACK; // Black goes first
+        let currentTurn = BLACK; // 黑子先行
         let gameStatus = 'waiting';
 
-        // DOM Elements
+        // DOM元素
         const boardElement = document.getElementById('board');
         const gridElement = document.getElementById('grid');
         const statusMessage = document.getElementById('statusMessage');
@@ -235,24 +237,31 @@
         const joinGameId = document.getElementById('joinGameId');
         const gameIdDisplay = document.getElementById('gameIdDisplay');
         const copyIdBtn = document.getElementById('copyIdBtn');
+        const leaveGameBtn = document.getElementById('leaveGameBtn');
 
-        // Initialize the game
+        // 初始化游戏
         function initGame() {
             drawBoard();
             setupEventListeners();
             enableControls();
-            updateStatus('Connected. Create a new game or join an existing one.');
+            updateStatus('已连接。创建新游戏或加入现有游戏。');
+            
+            // 创建在线状态监控
+            const connectedRef = ref(database, '.info/connected');
+            onValue(connectedRef, (snap) => {
+                isPlayerConnected = snap.val() === true;
+            });
         }
 
-        // Draw the game board
+        // 绘制游戏棋盘
         function drawBoard() {
-            // Clear existing grid
+            // 清除现有网格
             gridElement.innerHTML = '';
             
-            // Calculate spacing between grid lines
+            // 计算网格线之间的间距
             const cellSize = 100 / (BOARD_SIZE - 1);
             
-            // Create horizontal grid lines
+            // 创建水平网格线
             for (let i = 0; i < BOARD_SIZE; i++) {
                 const line = document.createElement('div');
                 line.classList.add('grid-line', 'horizontal');
@@ -260,7 +269,7 @@
                 gridElement.appendChild(line);
             }
             
-            // Create vertical grid lines
+            // 创建垂直网格线
             for (let i = 0; i < BOARD_SIZE; i++) {
                 const line = document.createElement('div');
                 line.classList.add('grid-line', 'vertical');
@@ -269,34 +278,39 @@
             }
         }
 
-        // Setup event listeners
+        // 设置事件监听器
         function setupEventListeners() {
-            // Board click/touch event
+            // 棋盘点击/触摸事件
             boardElement.addEventListener('click', handleBoardClick);
             
-            // Button event listeners
+            // 按钮事件监听器
             newGameBtn.addEventListener('click', createNewGame);
             joinGameBtn.addEventListener('click', joinGame);
             copyIdBtn.addEventListener('click', copyGameId);
+            leaveGameBtn.addEventListener('click', leaveGame);
         }
 
-        // Enable control buttons
+        // 启用控制按钮
         function enableControls() {
             newGameBtn.disabled = false;
             joinGameBtn.disabled = false;
+            leaveGameBtn.disabled = true;
         }
 
-        // Create a new game
+        // 创建新游戏
         async function createNewGame() {
-            // Create a new unique key for the game
+            // 清理之前的游戏
+            resetGameState();
+            
+            // 创建游戏的新唯一键
             const newGameRef = push(ref(database, 'games'));
             gameId = newGameRef.key;
             
-            // Initialize player data
+            // 初始化玩家数据
             playerId = 1;
             playerColor = BLACK;
             
-            // Set up initial game state in Firebase
+            // 在Firebase中设置初始游戏状态
             await set(newGameRef, {
                 board: generateEmptyBoard(),
                 currentTurn: BLACK,
@@ -304,110 +318,228 @@
                 player2: null,
                 status: 'waiting',
                 winner: null,
-                lastUpdate: Date.now()
+                lastUpdate: Date.now(),
+                createdAt: Date.now()
             });
             
-            // Set up game listeners
+            // 设置游戏监听器
             setupGameListeners(gameId);
             
-            // Update UI
+            // 设置断开连接处理
+            setupDisconnectHandlers();
+            
+            // 更新UI
             gameIdDisplay.textContent = gameId;
-            updateStatus('Waiting for another player to join...');
-            playerInfo.textContent = `Player 1 (Black)`;
-        ;
+            updateStatus('等待另一位玩家加入...');
+            playerInfo.textContent = `玩家1 (黑)`;
+            turnInfo.textContent = `等待中...`;
+            leaveGameBtn.disabled = false;
         }
 
-        // Join an existing game
+        // 加入现有游戏
         async function joinGame() {
+            // 清理之前的游戏
+            resetGameState();
+            
             const gameIdToJoin = joinGameId.value.trim();
             
             if (!gameIdToJoin) {
-                updateStatus('Please enter a valid Game ID');
+                updateStatus('请输入有效的游戏ID');
                 return;
             }
             
-            // Reference to the game
+            // 游戏的引用
             const gameRefToJoin = ref(database, `games/${gameIdToJoin}`);
             
             try {
-                // Check if game exists
+                // 检查游戏是否存在
                 const snapshot = await get(gameRefToJoin);
                 
                 if (!snapshot.exists()) {
-                    updateStatus('Game not found');
+                    updateStatus('找不到游戏');
                     return;
                 }
                 
                 const gameData = snapshot.val();
                 
-                // Check if game is already full
-                if (gameData.player2 !== null) {
-                    updateStatus('Game is already full');
-                    return;
+                // 检查游戏是否已满
+                if (gameData.player2 !== null && gameData.player2 !== undefined) {
+                    // 检查游戏是否创建很久前
+                    const currentTime = Date.now();
+                    const gameAgeInMinutes = (currentTime - gameData.createdAt) / (1000 * 60);
+                    
+                    if (gameAgeInMinutes > 30) {
+                        // 游戏太旧，可能是僵尸游戏 - 强制加入
+                        console.log("Game is old, forcing join as player 2");
+                    } else {
+                        updateStatus('游戏已满');
+                        return;
+                    }
                 }
                 
-                // Join as player 2
+                // 作为玩家2加入
                 gameId = gameIdToJoin;
                 playerId = 2;
                 playerColor = WHITE;
                 
-                // Update game data in Firebase
+                // 在Firebase中更新游戏数据
                 await update(gameRefToJoin, {
                     player2: generatePlayerId(),
                     status: 'active',
                     lastUpdate: Date.now()
                 });
                 
-                // Set up game listeners
+                // 设置游戏监听器
                 setupGameListeners(gameId);
                 
-                // Update UI
+                // 设置断开连接处理
+                setupDisconnectHandlers();
+                
+                // 更新UI
                 gameIdDisplay.textContent = gameId;
-                playerInfo.textContent = `Player 2 (White)`;
+                playerInfo.textContent = `玩家2 (白)`;
+                leaveGameBtn.disabled = false;
             } catch (error) {
-                console.error("Error joining game:", error);
-                updateStatus('Error joining game. Please try again.');
+                console.error("加入游戏时出错:", error);
+                updateStatus('加入游戏时出错。请重试。');
             }
         }
 
-        // Set up real-time listeners for game changes
+        // 设置断开连接处理器
+        function setupDisconnectHandlers() {
+            if (currentGameRef && isPlayerConnected) {
+                if (playerId === 1) {
+                    // 如果玩家1断开连接，将player1设为null
+                    onDisconnect(ref(database, `games/${gameId}/player1`)).set(null);
+                } else if (playerId === 2) {
+                    // 如果玩家2断开连接，将player2设为null
+                    onDisconnect(ref(database, `games/${gameId}/player2`)).set(null);
+                }
+                
+                // 检查游戏状态，如果双方都断开，设置为完成
+                onDisconnect(currentGameRef).update({
+                    lastUpdate: Date.now()
+                });
+            }
+        }
+
+        // 离开游戏
+        async function leaveGame() {
+            if (!gameId) return;
+            
+            try {
+                if (playerId === 1) {
+                    // 如果是玩家1离开
+                    await update(currentGameRef, {
+                        player1: null,
+                        lastUpdate: Date.now()
+                    });
+                } else if (playerId === 2) {
+                    // 如果是玩家2离开
+                    await update(currentGameRef, {
+                        player2: null,
+                        lastUpdate: Date.now()
+                    });
+                }
+                
+                // 检查是否双方都已离开
+                const snapshot = await get(currentGameRef);
+                if (snapshot.exists()) {
+                    const gameData = snapshot.val();
+                    if (gameData.player1 === null && gameData.player2 === null) {
+                        // 双方都已离开，删除游戏
+                        await remove(currentGameRef);
+                    }
+                }
+                
+                // 重置游戏状态
+                resetGameState();
+                updateStatus('已离开游戏。创建新游戏或加入现有游戏。');
+                
+            } catch (error) {
+                console.error("离开游戏时出错:", error);
+            }
+        }
+
+        // 重置游戏状态
+        function resetGameState() {
+            // 清理变量
+            gameId = null;
+            playerId = null;
+            playerColor = null;
+            
+            if (currentGameRef) {
+                // 取消任何现有的监听器
+                const pathParts = currentGameRef.toString().split('/');
+                const previousGameId = pathParts[pathParts.length - 1];
+                const previousGameRef = ref(database, `games/${previousGameId}`);
+                
+                // 重置UI
+                gameBoard = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(EMPTY));
+                updateBoardFromFirebase(gameBoard);
+                gameIdDisplay.textContent = '-';
+                playerInfo.textContent = '连接中...';
+                turnInfo.textContent = '-';
+                leaveGameBtn.disabled = true;
+                
+                currentGameRef = null;
+            }
+        }
+
+        // 设置游戏状态变化的实时监听器
         function setupGameListeners(gameId) {
             currentGameRef = ref(database, `games/${gameId}`);
             
-            // Listen for changes to the game state
+            // 监听游戏状态的变化
             onValue(currentGameRef, (snapshot) => {
                 if (!snapshot.exists()) {
-                    updateStatus('Game no longer exists');
+                    updateStatus('游戏不再存在');
+                    resetGameState();
                     return;
                 }
                 
                 const gameData = snapshot.val();
                 
-                // Update local game state
+                // 检查玩家连接状态
+                if (playerId === 1 && gameData.player1 === null) {
+                    // 玩家1已断开连接但页面仍然打开
+                    resetGameState();
+                    updateStatus('您已与游戏断开连接');
+                    return;
+                }
+                
+                if (playerId === 2 && gameData.player2 === null) {
+                    // 玩家2已断开连接但页面仍然打开
+                    resetGameState();
+                    updateStatus('您已与游戏断开连接');
+                    return;
+                }
+                
+                // 更新本地游戏状态
                 currentTurn = gameData.currentTurn;
                 gameStatus = gameData.status;
                 
-                // Update the board
+                // 更新棋盘
                 updateBoardFromFirebase(gameData.board);
                 
-                // Update game status
+                // 更新游戏状态
                 updateGameStatus(gameData);
             });
         }
 
-        // Update the board display based on Firebase data
+        // 根据Firebase数据更新棋盘显示
         function updateBoardFromFirebase(boardData) {
-            // Clear existing stones
+            // 清除现有棋子
             const stones = document.querySelectorAll('.stone');
             stones.forEach(stone => stone.remove());
             
-            // Update local board state
+            // 更新本地棋盘状态
             gameBoard = boardData;
             
-            // Calculate cell size
+            // 计算单元格大小
             const cellSize = 100 / (BOARD_SIZE - 1);
             
-            // Render stones
+            // 渲染棋子
             for (let row = 0; row < BOARD_SIZE; row++) {
                 for (let col = 0; col < BOARD_SIZE; col++) {
                     const cell = boardData[row][col];
@@ -417,11 +549,11 @@
                         stone.classList.add('stone');
                         stone.classList.add(cell === BLACK ? 'black-stone' : 'white-stone');
                         
-                        // Calculate position percentage
+                        // 计算位置百分比
                         const posX = col * cellSize;
                         const posY = row * cellSize;
                         
-                        // Size is proportional to cell size but slightly smaller
+                        // 尺寸与单元格大小成比例，但略小
                         const stoneSize = cellSize * 0.8;
                         
                         stone.style.left = `${posX}%`;
@@ -435,38 +567,47 @@
             }
         }
 
-        // Update game status display
+        // 更新游戏状态显示
         function updateGameStatus(gameData) {
-            // Update turn info
+            // 更新回合信息
             if (gameData.status === 'waiting') {
-                ;
+                turnInfo.textContent = '等待玩家...';
             } else if (gameData.status === 'active') {
-                turnInfo.textContent = gameData.currentTurn === BLACK ? 'Black' : 'White';
+                turnInfo.textContent = gameData.currentTurn === BLACK ? '黑方' : '白方';
             }
             
-            // Update game status message
+            // 更新游戏状态消息
             if (gameData.status === 'waiting') {
-                updateStatus('Waiting for another player to join...');
+                updateStatus('等待另一位玩家加入...');
             } else if (gameData.status === 'active') {
                 if (gameData.currentTurn === playerColor) {
-                    updateStatus('Your turn!');
+                    updateStatus('轮到您了!');
                 } else {
-                    updateStatus('Opponent\'s turn');
+                    updateStatus('对手的回合');
                 }
             } else if (gameData.status === 'finished') {
                 if (gameData.winner === null) {
-                    updateStatus('Game ended in a draw');
+                    updateStatus('游戏以平局结束');
                 } else if (gameData.winner === playerColor) {
-                    updateStatus('You won!');
+                    updateStatus('您赢了!');
                 } else {
-                    updateStatus('You lost');
+                    updateStatus('您输了');
+                }
+            }
+            
+            // 检查对手是否离开
+            if (gameData.status === 'active') {
+                if (playerId === 1 && gameData.player2 === null) {
+                    updateStatus('对手已离开游戏');
+                } else if (playerId === 2 && gameData.player1 === null) {
+                    updateStatus('对手已离开游戏');
                 }
             }
         }
 
-        // Handle board click events
+        // 处理棋盘点击事件
         function handleBoardClick(event) {
-            // Only proceed if it's an active game and player's turn
+            // 只有在游戏处于活动状态且轮到玩家时才继续
             if (gameStatus !== 'active' || currentTurn !== playerColor) {
                 return;
             }
@@ -476,39 +617,39 @@
             const boardX = event.clientX - rect.left;
             const boardY = event.clientY - rect.top;
             
-            // Convert to percentage
+            // 转换为百分比
             const pctX = boardX / boardSize * 100;
             const pctY = boardY / boardSize * 100;
             
-            // Adjust for grid margin (10px on each side)
+            // 调整网格边距（每边10px）
             const adjustedPctX = (pctX - 10) / 80 * 100;
             const adjustedPctY = (pctY - 10) / 80 * 100;
             
-            // Calculate clicked cell
+            // 计算点击的单元格
             const cellSize = 100 / (BOARD_SIZE - 1);
             const col = Math.round(adjustedPctX / cellSize);
             const row = Math.round(adjustedPctY / cellSize);
             
-            // Check if valid coordinates
+            // 检查是否有效坐标
             if (row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
                 makeMove(row, col);
             }
         }
 
-        // Make a move on the board
+        // 在棋盘上落子
         async function makeMove(row, col) {
-            // Check if the cell is empty
+            // 检查单元格是否为空
             if (gameBoard[row][col] !== EMPTY) {
                 return;
             }
             
-            // Update local board
+            // 更新本地棋盘
             gameBoard[row][col] = playerColor;
             
-            // Check for win
+            // 检查是否获胜
             const hasWon = checkWinCondition(row, col, playerColor);
             
-            // Prepare updates for Firebase
+            // 准备Firebase更新
             const updates = {
                 board: gameBoard,
                 currentTurn: playerColor === BLACK ? WHITE : BLACK,
@@ -520,34 +661,34 @@
                 updates.winner = playerColor;
             } else if (isBoardFull()) {
                 updates.status = 'finished';
-                updates.winner = null; // Draw
+                updates.winner = null; // 平局
             }
             
-            // Update Firebase
+            // 更新Firebase
             try {
                 await update(currentGameRef, updates);
             } catch (error) {
-                console.error("Error updating game:", error);
-                updateStatus('Error updating game');
+                console.error("更新游戏时出错:", error);
+                updateStatus('更新游戏时出错');
             }
         }
 
-        // Check win condition (5 in a row)
+        // 检查获胜条件（五子连珠）
         function checkWinCondition(row, col, playerColor) {
             const directions = [
-                [0, 1],  // horizontal
-                [1, 0],  // vertical
-                [1, 1],  // diagonal down-right
-                [1, -1]  // diagonal down-left
+                [0, 1],  // 水平
+                [1, 0],  // 垂直
+                [1, 1],  // 右下对角线
+                [1, -1]  // 左下对角线
             ];
             
             for (const [dx, dy] of directions) {
-                let count = 1;  // Count the placed stone itself
+                let count = 1;  // 计算放置的棋子本身
                 
-                // Check in positive direction
+                // 检查正方向
                 count += countConsecutive(row, col, dx, dy, playerColor);
                 
-                // Check in negative direction
+                // 检查负方向
                 count += countConsecutive(row, col, -dx, -dy, playerColor);
                 
                 if (count >= 5) {
@@ -558,7 +699,7 @@
             return false;
         }
 
-        // Count consecutive stones in a direction
+        // 计算一个方向上的连续棋子
         function countConsecutive(row, col, dx, dy, playerColor) {
             let count = 0;
             let r = row + dx;
@@ -577,7 +718,7 @@
             return count;
         }
 
-        // Check if the board is full (draw)
+        // 检查棋盘是否已满（平局）
         function isBoardFull() {
             for (let row = 0; row < BOARD_SIZE; row++) {
                 for (let col = 0; col < BOARD_SIZE; col++) {
@@ -589,39 +730,65 @@
             return true;
         }
 
-        // Generate an empty board data structure
+        // 生成空棋盘数据结构
         function generateEmptyBoard() {
             return Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(EMPTY));
         }
 
-        // Generate a random player ID
+        // 生成随机玩家ID
         function generatePlayerId() {
             return Math.random().toString(36).substring(2, 10);
         }
 
-        // Copy game ID to clipboard
+        // 将游戏ID复制到剪贴板
         function copyGameId() {
             if (gameId) {
                 navigator.clipboard.writeText(gameId)
                     .then(() => {
-                        copyIdBtn.textContent = 'Copied!';
+                        copyIdBtn.textContent = '已复制!';
                         setTimeout(() => {
-                            copyIdBtn.textContent = 'Copy Game ID';
+                            copyIdBtn.textContent = '复制游戏ID';
                         }, 2000);
                     })
                     .catch(err => {
-                        console.error('Failed to copy: ', err);
+                        console.error('复制失败: ', err);
                     });
             }
         }
 
-        // Update status message
+        // 更新状态消息
         function updateStatus(message) {
             statusMessage.innerHTML = message;
         }
 
-        // Initialize game when Firebase is ready
+        // 当Firebase准备好时初始化游戏
         initGame();
+        
+        // 定期清理过期游戏
+        async function cleanupOldGames() {
+            const cutoffTime = Date.now() - (2 * 60 * 60 * 1000); // 2小时前
+            const gamesRef = ref(database, 'games');
+            
+            try {
+                const snapshot = await get(gamesRef);
+                if (snapshot.exists()) {
+                    const games = snapshot.val();
+                    
+                    for (const [gameId, game] of Object.entries(games)) {
+                        if (game.lastUpdate < cutoffTime) {
+                            // 删除2小时未活动的游戏
+                            await remove(ref(database, `games/${gameId}`));
+                            console.log(`清理过期游戏: ${gameId}`);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error("清理过期游戏时出错:", error);
+            }
+        }
+        
+        // 每30分钟运行一次清理
+        setInterval(cleanupOldGames, 30 * 60 * 1000);
     </script>
 </body>
 </html>
