@@ -3,250 +3,237 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>中国象棋 - 在线对战</title>
+    <title>在线中国象棋</title>
     <style>
         :root {
-            --board-color: #f0d2a8;
+            --board-color: #f2d9a2;
             --line-color: #000;
-            --red-piece: #d23;
-            --red-text: #fff;
+            --red-piece: #ff4d4d;
             --black-piece: #333;
-            --black-text: #eee;
-            --highlight: rgba(255, 255, 0, 0.5);
+            --highlight-color: rgba(255, 255, 0, 0.5);
             --possible-move: rgba(0, 255, 0, 0.3);
         }
-
+        
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
-
+        
         body {
-            font-family: "Microsoft YaHei", "微软雅黑", "SimHei", "黑体", sans-serif;
-            background-color: #f5f5f5;
-            color: #333;
-            display: flex;
-            flex-direction: column;
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #614385, #516395);
             min-height: 100vh;
-            padding: 0 1rem;
-        }
-
-        header {
-            text-align: center;
-            padding: 1rem 0;
-        }
-
-        h1 {
-            font-size: 1.8rem;
-            margin-bottom: 0.5rem;
-            color: #333;
-        }
-
-        .game-container {
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-            gap: 1rem;
-            max-width: 1200px;
-            margin: 0 auto;
+            color: #fff;
+        }
+        
+        .container {
+            max-width: 800px;
             width: 100%;
+            padding: 20px;
+            margin: 0 auto;
         }
-
-        @media (min-width: 968px) {
-            .game-container {
-                flex-direction: row;
-                align-items: flex-start;
-            }
+        
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 10px;
         }
-
+        
+        h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+            color: #fff;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        
+        .game-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .player-info {
+            text-align: center;
+            flex: 1;
+            padding: 5px;
+        }
+        
+        .current-player {
+            font-weight: bold;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+        
         .board-container {
             position: relative;
             width: 100%;
-            max-width: 600px;
+            max-width: 450px;
+            margin: 0 auto;
         }
-
-        #board {
-            width: 100%;
-            aspect-ratio: 9/10;
-            background-color: var(--board-color);
+        
+        .board {
             position: relative;
-            border: 2px solid #333;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-            user-select: none;
-            touch-action: manipulation;
+            width: 100%;
+            padding-top: 111.11%; /* 9:10 ratio */
+            background-color: var(--board-color);
+            border: 2px solid #5d4037;
+            border-radius: 4px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
         }
-
-        .board-grid {
+        
+        .grid {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
+            display: grid;
+            grid-template-columns: repeat(9, 1fr);
+            grid-template-rows: repeat(10, 1fr);
+        }
+        
+        .cell {
+            position: relative;
+            cursor: pointer;
+        }
+        
+        .cell:before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            border-right: 1px solid var(--line-color);
+            border-bottom: 1px solid var(--line-color);
             pointer-events: none;
         }
-
+        
+        .cell:nth-child(9n):before {
+            border-right: none;
+        }
+        
+        .cell:nth-child(n+82):before {
+            border-bottom: none;
+        }
+        
+        .river {
+            position: absolute;
+            top: 45%;
+            left: 0;
+            width: 100%;
+            height: 10%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 3vw;
+            pointer-events: none;
+            color: rgba(0, 0, 0, 0.5);
+        }
+        
         .piece {
             position: absolute;
-            width: 11%;
-            height: 11%;
+            width: 80%;
+            height: 80%;
+            top: 10%;
+            left: 10%;
             border-radius: 50%;
             display: flex;
-            align-items: center;
             justify-content: center;
+            align-items: center;
             font-weight: bold;
-            font-size: min(4vw, 24px);
-            cursor: pointer;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-            transition: transform 0.2s;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
             z-index: 10;
+            transition: all 0.2s ease;
+            cursor: pointer;
         }
-
+        
         .piece.red {
             background-color: var(--red-piece);
-            color: var(--red-text);
+            color: #fff;
         }
-
+        
         .piece.black {
             background-color: var(--black-piece);
-            color: var(--black-text);
+            color: #fff;
         }
-
+        
         .piece.selected {
-            box-shadow: 0 0 0 3px var(--highlight);
-            transform: scale(1.1);
+            box-shadow: 0 0 0 3px var(--highlight-color);
         }
-
+        
         .possible-move {
             position: absolute;
-            width: 8%;
-            height: 8%;
+            width: 50%;
+            height: 50%;
+            top: 25%;
+            left: 25%;
             border-radius: 50%;
             background-color: var(--possible-move);
             z-index: 5;
         }
-
-        .side-panel {
-            width: 100%;
-            max-width: 300px;
-            background-color: white;
-            border-radius: 8px;
-            padding: 1rem;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        }
-
-        .game-info {
-            margin-bottom: 1rem;
-            padding-bottom: 1rem;
-            border-bottom: 1px solid #eee;
-        }
-
-        .player-info {
-            display: flex;
-            align-items: center;
-            margin-bottom: 0.5rem;
-        }
-
-        .player-color {
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            margin-right: 10px;
-        }
-
-        .red-color {
-            background-color: var(--red-piece);
-        }
-
-        .black-color {
-            background-color: var(--black-piece);
-        }
-
-        .game-status {
-            font-weight: bold;
-            margin-top: 1rem;
-            font-size: 1.1rem;
-        }
-
+        
         .controls {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 0.5rem;
-            margin-top: 1rem;
-        }
-
-        .btn {
-            padding: 0.5rem;
-            border: none;
-            border-radius: 4px;
-            background-color: #4a6fa5;
-            color: white;
-            cursor: pointer;
-            transition: background-color 0.2s;
-            font-size: 0.9rem;
-        }
-
-        .btn:hover {
-            background-color: #385888;
-        }
-
-        .btn-new {
-            grid-column: span 2;
-            background-color: #28a745;
-        }
-
-        .btn-new:hover {
-            background-color: #218838;
-        }
-
-        .chat-container {
-            margin-top: 1rem;
-        }
-
-        .chat-messages {
-            height: 150px;
-            overflow-y: auto;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            padding: 0.5rem;
-            margin-bottom: 0.5rem;
-            background-color: #f9f9f9;
-        }
-
-        .chat-input {
             display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
-
-        #messageInput {
-            flex: 1;
-            padding: 0.5rem;
-            border: 1px solid #ddd;
-            border-radius: 4px 0 0 4px;
-        }
-
-        .send-btn {
-            padding: 0.5rem;
+        
+        button {
+            padding: 10px 15px;
+            background: linear-gradient(135deg, #ff416c, #ff4b2b);
             border: none;
-            border-radius: 0 4px 4px 0;
-            background-color: #4a6fa5;
-            color: white;
-            cursor: pointer;
-        }
-
-        .game-id-container {
-            margin-top: 1rem;
-            padding: 0.5rem;
-            background-color: #f0f0f0;
             border-radius: 4px;
-            text-align: center;
-        }
-
-        #gameId {
-            font-family: monospace;
+            color: white;
             font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
         }
-
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        .multiplayer-controls {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 100%;
+            max-width: 450px;
+        }
+        
+        .room-controls {
+            display: flex;
+            gap: 10px;
+        }
+        
+        input {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.8);
+        }
+        
         .modal {
             display: none;
             position: fixed;
@@ -254,229 +241,147 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-            z-index: 100;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 50;
             justify-content: center;
             align-items: center;
         }
-
-        .modal.active {
-            display: flex;
-        }
-
+        
         .modal-content {
             background-color: white;
-            padding: 1.5rem;
+            padding: 20px;
             border-radius: 8px;
-            max-width: 90%;
-            width: 300px;
+            max-width: 80%;
+            width: 350px;
+            color: #333;
             text-align: center;
         }
-
-        .modal h2 {
-            margin-bottom: 1rem;
+        
+        .modal-content h2 {
+            margin-bottom: 20px;
+            color: #333;
         }
-
-        .modal input {
-            width: 100%;
-            padding: 0.5rem;
-            margin-bottom: 1rem;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-
-        footer {
-            text-align: center;
-            padding: 1rem 0;
-            margin-top: auto;
-            font-size: 0.8rem;
-            color: #666;
-        }
-
-        .river {
-            position: absolute;
-            top: 45%;
-            width: 100%;
-            height: 10%;
-            background-color: rgba(135, 206, 235, 0.2);
-            z-index: 1;
-            pointer-events: none;
-        }
-
-        .palace {
-            position: absolute;
-            width: 22%;
-            height: 25%;
-            border: 2px solid var(--line-color);
-            z-index: 1;
-            pointer-events: none;
-        }
-
-        .palace.red {
-            bottom: 0;
-            left: 39%;
-        }
-
-        .palace.black {
-            top: 0;
-            left: 39%;
-        }
-
-        .palace::before,
-        .palace::after {
-            content: '';
-            position: absolute;
-            background-color: var(--line-color);
-            z-index: 1;
-        }
-
-        .palace::before {
-            width: 100%;
-            height: 2px;
-            top: 50%;
-            transform: translateY(-50%);
-        }
-
-        .palace::after {
-            width: 2px;
-            height: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-        }
-
-        .diagonal {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-        }
-
-        .diagonal::before,
-        .diagonal::after {
-            content: '';
-            position: absolute;
-            width: 140%;
-            height: 2px;
-            background-color: var(--line-color);
-            top: 50%;
-            left: -20%;
-            transform-origin: center;
-        }
-
-        .diagonal::before {
-            transform: translateY(-50%) rotate(45deg);
-        }
-
-        .diagonal::after {
-            transform: translateY(-50%) rotate(-45deg);
-        }
-
-        .toast {
+        
+        .notification {
             position: fixed;
             top: 20px;
             left: 50%;
             transform: translateX(-50%);
             background-color: rgba(0, 0, 0, 0.8);
             color: white;
-            padding: 0.5rem 1rem;
+            padding: 10px 20px;
             border-radius: 4px;
-            z-index: 1000;
-            opacity: 0;
-            transition: opacity 0.3s;
+            z-index: 100;
+            display: none;
         }
-
-        .toast.show {
-            opacity: 1;
+        
+        /* 棋盘标记 */
+        .palace {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+        }
+        
+        .palace-top {
+            top: 0;
+            left: 33.33%;
+            width: 33.33%;
+            height: 30%;
+            border: 1px solid var(--line-color);
+            border-top: none;
+        }
+        
+        .palace-bottom {
+            bottom: 0;
+            left: 33.33%;
+            width: 33.33%;
+            height: 30%;
+            border: 1px solid var(--line-color);
+            border-bottom: none;
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 600px) {
+            .container {
+                padding: 10px;
+            }
+            
+            h1 {
+                font-size: 24px;
+            }
+            
+            .game-info {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .controls {
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+            
+            .room-controls {
+                flex-direction: column;
+            }
         }
     </style>
 </head>
 <body>
-    <header>
-        <h1>中国象棋 - 在线对战</h1>
-        <p>创建或加入游戏，与朋友在线对弈</p>
-    </header>
-
-    <div class="game-container">
+    <div class="container">
+        <header>
+            <h1>在线中国象棋</h1>
+        </header>
+        
+        <div class="game-info">
+            <div class="player-info" id="player-red">
+                红方 <span id="red-name">玩家1</span>
+            </div>
+            <div id="game-status">等待开始</div>
+            <div class="player-info" id="player-black">
+                黑方 <span id="black-name">玩家2</span>
+            </div>
+        </div>
+        
         <div class="board-container">
-            <div id="board">
-                <div class="river"></div>
-                <div class="palace red"></div>
-                <div class="palace black">
-                    <div class="diagonal"></div>
-                </div>
-                <div class="board-grid"></div>
-                <!-- Pieces will be added here by JavaScript -->
+            <div class="board">
+                <div class="grid" id="board"></div>
+                <div class="river">楚河    汉界</div>
             </div>
         </div>
-
-        <div class="side-panel">
-            <div class="game-info">
-                <div class="player-info">
-                    <div class="player-color red-color"></div>
-                    <div id="redPlayer">红方: 等待加入...</div>
-                </div>
-                <div class="player-info">
-                    <div class="player-color black-color"></div>
-                    <div id="blackPlayer">黑方: 等待加入...</div>
-                </div>
-                <div class="game-status" id="gameStatus">等待开始游戏</div>
+        
+        <div class="controls">
+            <button id="new-game">新游戏</button>
+            <button id="undo">悔棋</button>
+            <button id="resign">认输</button>
+        </div>
+        
+        <div class="multiplayer-controls">
+            <div class="room-controls">
+                <input type="text" id="room-id" placeholder="输入房间ID">
+                <button id="create-room">创建房间</button>
+                <button id="join-room">加入房间</button>
             </div>
-
-            <div class="game-id-container">
-                游戏ID: <span id="gameId">-</span>
-                <button class="btn" id="copyGameId">复制</button>
-            </div>
-
-            <div class="controls">
-                <button class="btn btn-new" id="newGameBtn">创建新游戏</button>
-                <button class="btn" id="joinGameBtn">加入游戏</button>
-                <button class="btn" id="resignBtn" disabled>认输</button>
-                <button class="btn" id="drawBtn" disabled>提和</button>
-            </div>
-
-            <div class="chat-container">
-                <h3>聊天</h3>
-                <div class="chat-messages" id="chatMessages"></div>
-                <div class="chat-input">
-                    <input type="text" id="messageInput" placeholder="输入消息...">
-                    <button class="send-btn" id="sendMessageBtn">发送</button>
-                </div>
-            </div>
+            <div id="room-info" style="text-align: center; margin-top: 10px;"></div>
         </div>
     </div>
-
-    <div class="modal" id="joinGameModal">
+    
+    <div class="modal" id="game-over-modal">
         <div class="modal-content">
-            <h2>加入游戏</h2>
-            <input type="text" id="joinGameInput" placeholder="输入游戏ID">
-            <input type="text" id="playerNameInput" placeholder="输入您的名称">
-            <button class="btn" id="confirmJoinBtn">加入</button>
-            <button class="btn" id="cancelJoinBtn">取消</button>
+            <h2 id="winner-message"></h2>
+            <button id="play-again">再来一局</button>
         </div>
     </div>
-
-    <div class="modal" id="newGameModal">
-        <div class="modal-content">
-            <h2>创建新游戏</h2>
-            <input type="text" id="newGameNameInput" placeholder="输入您的名称">
-            <button class="btn" id="confirmNewGameBtn">创建</button>
-            <button class="btn" id="cancelNewGameBtn">取消</button>
-        </div>
-    </div>
-
-    <div class="toast" id="toast"></div>
-
-    <footer>
-        <p>© 2025 中国象棋在线 | 使用Firebase实时数据库</p>
-    </footer>
-
+    
+    <div class="notification" id="notification"></div>
+    
+    <!-- Firebase -->
     <script type="module">
-        // Import Firebase modules
+        // Import the functions you need from the SDKs you need
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-app.js";
-        import { getDatabase, ref, set, onValue, push, child, update, remove } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-database.js";
         import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-analytics.js";
-
-        // Firebase configuration
+        import { getDatabase, ref, set, onValue, push, child, update } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-database.js";
+        
+        // Your web app's Firebase configuration
         const firebaseConfig = {
             apiKey: "AIzaSyAqbA4PN7uJr_lnIRHeqvvLJQXOHHoZW4E",
             authDomain: "test-8a5cb.firebaseapp.com",
@@ -487,1005 +392,704 @@
             appId: "1:227317352826:web:90d96f27a4dc5d96c16ec3",
             measurementId: "G-EMJ5ZVJXBE"
         };
-
+        
         // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const analytics = getAnalytics(app);
         const database = getDatabase(app);
-
-        // Game constants
-        const BOARD_SIZE = 9; // 9 columns
-        const BOARD_ROWS = 10; // 10 rows
-        const RED = 'red';
-        const BLACK = 'black';
-
-        // Game state
-        let gameState = {
-            board: initializeBoard(),
-            currentTurn: RED,
-            selectedPiece: null,
-            possibleMoves: [],
-            gameId: null,
-            playerId: null,
-            playerColor: null,
-            playerName: "",
-            redPlayerName: "",
-            blackPlayerName: "",
-            status: "waiting"
-        };
-
-        // DOM Elements
-        const boardElement = document.getElementById('board');
-        const gameStatusElement = document.getElementById('gameStatus');
-        const redPlayerElement = document.getElementById('redPlayer');
-        const blackPlayerElement = document.getElementById('blackPlayer');
-        const gameIdElement = document.getElementById('gameId');
-        const copyGameIdButton = document.getElementById('copyGameId');
-        const newGameButton = document.getElementById('newGameBtn');
-        const joinGameButton = document.getElementById('joinGameBtn');
-        const resignButton = document.getElementById('resignBtn');
-        const drawButton = document.getElementById('drawBtn');
-        const joinGameModal = document.getElementById('joinGameModal');
-        const joinGameInput = document.getElementById('joinGameInput');
-        const playerNameInput = document.getElementById('playerNameInput');
-        const confirmJoinButton = document.getElementById('confirmJoinBtn');
-        const cancelJoinButton = document.getElementById('cancelJoinBtn');
-        const newGameModal = document.getElementById('newGameModal');
-        const newGameNameInput = document.getElementById('newGameNameInput');
-        const confirmNewGameButton = document.getElementById('confirmNewGameBtn');
-        const cancelNewGameButton = document.getElementById('cancelNewGameBtn');
-        const chatMessagesElement = document.getElementById('chatMessages');
-        const messageInput = document.getElementById('messageInput');
-        const sendMessageButton = document.getElementById('sendMessageBtn');
-        const toastElement = document.getElementById('toast');
-
-        // Initialize the board with starting positions
-        function initializeBoard() {
-            const board = Array(BOARD_ROWS).fill().map(() => Array(BOARD_SIZE).fill(null));
+        
+        // Main game code
+        document.addEventListener('DOMContentLoaded', function() {
+            const board = document.getElementById('board');
+            const newGameBtn = document.getElementById('new-game');
+            const undoBtn = document.getElementById('undo');
+            const resignBtn = document.getElementById('resign');
+            const createRoomBtn = document.getElementById('create-room');
+            const joinRoomBtn = document.getElementById('join-room');
+            const roomIdInput = document.getElementById('room-id');
+            const roomInfo = document.getElementById('room-info');
+            const gameOverModal = document.getElementById('game-over-modal');
+            const winnerMessage = document.getElementById('winner-message');
+            const playAgainBtn = document.getElementById('play-again');
+            const notification = document.getElementById('notification');
+            const gameStatus = document.getElementById('game-status');
+            const redName = document.getElementById('red-name');
+            const blackName = document.getElementById('black-name');
+            const playerRed = document.getElementById('player-red');
+            const playerBlack = document.getElementById('player-black');
             
-            // Place pieces in starting positions
-            // Red pieces (bottom)
-            board[9][0] = { type: 'rook', color: RED, symbol: '車' };
-            board[9][1] = { type: 'horse', color: RED, symbol: '馬' };
-            board[9][2] = { type: 'elephant', color: RED, symbol: '相' };
-            board[9][3] = { type: 'advisor', color: RED, symbol: '仕' };
-            board[9][4] = { type: 'general', color: RED, symbol: '帥' };
-            board[9][5] = { type: 'advisor', color: RED, symbol: '仕' };
-            board[9][6] = { type: 'elephant', color: RED, symbol: '相' };
-            board[9][7] = { type: 'horse', color: RED, symbol: '馬' };
-            board[9][8] = { type: 'rook', color: RED, symbol: '車' };
-            board[7][1] = { type: 'cannon', color: RED, symbol: '炮' };
-            board[7][7] = { type: 'cannon', color: RED, symbol: '炮' };
-            board[6][0] = { type: 'pawn', color: RED, symbol: '兵' };
-            board[6][2] = { type: 'pawn', color: RED, symbol: '兵' };
-            board[6][4] = { type: 'pawn', color: RED, symbol: '兵' };
-            board[6][6] = { type: 'pawn', color: RED, symbol: '兵' };
-            board[6][8] = { type: 'pawn', color: RED, symbol: '兵' };
-
-            // Black pieces (top)
-            board[0][0] = { type: 'rook', color: BLACK, symbol: '車' };
-            board[0][1] = { type: 'horse', color: BLACK, symbol: '馬' };
-            board[0][2] = { type: 'elephant', color: BLACK, symbol: '象' };
-            board[0][3] = { type: 'advisor', color: BLACK, symbol: '士' };
-            board[0][4] = { type: 'general', color: BLACK, symbol: '將' };
-            board[0][5] = { type: 'advisor', color: BLACK, symbol: '士' };
-            board[0][6] = { type: 'elephant', color: BLACK, symbol: '象' };
-            board[0][7] = { type: 'horse', color: BLACK, symbol: '馬' };
-            board[0][8] = { type: 'rook', color: BLACK, symbol: '車' };
-            board[2][1] = { type: 'cannon', color: BLACK, symbol: '炮' };
-            board[2][7] = { type: 'cannon', color: BLACK, symbol: '炮' };
-            board[3][0] = { type: 'pawn', color: BLACK, symbol: '卒' };
-            board[3][2] = { type: 'pawn', color: BLACK, symbol: '卒' };
-            board[3][4] = { type: 'pawn', color: BLACK, symbol: '卒' };
-            board[3][6] = { type: 'pawn', color: BLACK, symbol: '卒' };
-            board[3][8] = { type: 'pawn', color: BLACK, symbol: '卒' };
-
-            return board;
-        }
-
-        // Render the board and pieces
-        function renderBoard() {
-            // Clear previous pieces
-            const pieces = boardElement.querySelectorAll('.piece');
-            pieces.forEach(piece => piece.remove());
-
-            const possibleMoveMarkers = boardElement.querySelectorAll('.possible-move');
-            possibleMoveMarkers.forEach(marker => marker.remove());
-
-            // Render current pieces
-            for (let row = 0; row < BOARD_ROWS; row++) {
-                for (let col = 0; col < BOARD_SIZE; col++) {
-                    const piece = gameState.board[row][col];
-                    if (piece) {
-                        const pieceElement = document.createElement('div');
-                        pieceElement.className = `piece ${piece.color}`;
-                        pieceElement.textContent = piece.symbol;
-                        pieceElement.dataset.row = row;
-                        pieceElement.dataset.col = col;
+            // 游戏状态
+            let gameState = {
+                board: [],
+                currentPlayer: 'red',
+                selectedPiece: null,
+                possibleMoves: [],
+                history: [],
+                gameOver: false,
+                winner: null,
+                roomId: null,
+                playerId: null,
+                playerColor: null,
+                spectating: false
+            };
+            
+            // 初始化棋盘
+            function initBoard() {
+                // 9x10 棋盘
+                const initialBoard = Array(10).fill().map(() => Array(9).fill(null));
+                
+                // 布置棋子
+                // 红方（底部）
+                initialBoard[9][0] = { type: 'rook', color: 'red', text: '车' };
+                initialBoard[9][1] = { type: 'horse', color: 'red', text: '马' };
+                initialBoard[9][2] = { type: 'elephant', color: 'red', text: '相' };
+                initialBoard[9][3] = { type: 'advisor', color: 'red', text: '仕' };
+                initialBoard[9][4] = { type: 'general', color: 'red', text: '帅' };
+                initialBoard[9][5] = { type: 'advisor', color: 'red', text: '仕' };
+                initialBoard[9][6] = { type: 'elephant', color: 'red', text: '相' };
+                initialBoard[9][7] = { type: 'horse', color: 'red', text: '马' };
+                initialBoard[9][8] = { type: 'rook', color: 'red', text: '车' };
+                initialBoard[7][1] = { type: 'cannon', color: 'red', text: '炮' };
+                initialBoard[7][7] = { type: 'cannon', color: 'red', text: '炮' };
+                initialBoard[6][0] = { type: 'pawn', color: 'red', text: '兵' };
+                initialBoard[6][2] = { type: 'pawn', color: 'red', text: '兵' };
+                initialBoard[6][4] = { type: 'pawn', color: 'red', text: '兵' };
+                initialBoard[6][6] = { type: 'pawn', color: 'red', text: '兵' };
+                initialBoard[6][8] = { type: 'pawn', color: 'red', text: '兵' };
+                
+                // 黑方（顶部）
+                initialBoard[0][0] = { type: 'rook', color: 'black', text: '車' };
+                initialBoard[0][1] = { type: 'horse', color: 'black', text: '馬' };
+                initialBoard[0][2] = { type: 'elephant', color: 'black', text: '象' };
+                initialBoard[0][3] = { type: 'advisor', color: 'black', text: '士' };
+                initialBoard[0][4] = { type: 'general', color: 'black', text: '将' };
+                initialBoard[0][5] = { type: 'advisor', color: 'black', text: '士' };
+                initialBoard[0][6] = { type: 'elephant', color: 'black', text: '象' };
+                initialBoard[0][7] = { type: 'horse', color: 'black', text: '馬' };
+                initialBoard[0][8] = { type: 'rook', color: 'black', text: '車' };
+                initialBoard[2][1] = { type: 'cannon', color: 'black', text: '炮' };
+                initialBoard[2][7] = { type: 'cannon', color: 'black', text: '炮' };
+                initialBoard[3][0] = { type: 'pawn', color: 'black', text: '卒' };
+                initialBoard[3][2] = { type: 'pawn', color: 'black', text: '卒' };
+                initialBoard[3][4] = { type: 'pawn', color: 'black', text: '卒' };
+                initialBoard[3][6] = { type: 'pawn', color: 'black', text: '卒' };
+                initialBoard[3][8] = { type: 'pawn', color: 'black', text: '卒' };
+                
+                return initialBoard;
+            }
+            
+            // 渲染棋盘
+            function renderBoard() {
+                board.innerHTML = '';
+                
+                for (let row = 0; row < 10; row++) {
+                    for (let col = 0; col < 9; col++) {
+                        const cell = document.createElement('div');
+                        cell.className = 'cell';
+                        cell.dataset.row = row;
+                        cell.dataset.col = col;
                         
-                        // Position piece on the board
-                        const left = (col / (BOARD_SIZE - 1)) * 100;
-                        const top = (row / (BOARD_ROWS - 1)) * 100;
-                        pieceElement.style.left = `${left}%`;
-                        pieceElement.style.top = `${top}%`;
-                        pieceElement.style.transform = 'translate(-50%, -50%)';
-                        
-                        if (gameState.selectedPiece && 
-                            gameState.selectedPiece.row === row && 
-                            gameState.selectedPiece.col === col) {
-                            pieceElement.classList.add('selected');
+                        const piece = gameState.board[row][col];
+                        if (piece) {
+                            const pieceElement = document.createElement('div');
+                            pieceElement.className = `piece ${piece.color}`;
+                            pieceElement.innerText = piece.text;
+                            pieceElement.dataset.type = piece.type;
+                            cell.appendChild(pieceElement);
                         }
                         
-                        boardElement.appendChild(pieceElement);
-                    }
-                }
-            }
-
-            // Render possible moves
-            gameState.possibleMoves.forEach(move => {
-                const markerElement = document.createElement('div');
-                markerElement.className = 'possible-move';
-                markerElement.dataset.row = move.row;
-                markerElement.dataset.col = move.col;
-                
-                // Position marker on the board
-                const left = (move.col / (BOARD_SIZE - 1)) * 100;
-                const top = (move.row / (BOARD_ROWS - 1)) * 100;
-                markerElement.style.left = `${left}%`;
-                markerElement.style.top = `${top}%`;
-                markerElement.style.transform = 'translate(-50%, -50%)';
-                
-                boardElement.appendChild(markerElement);
-            });
-        }
-
-        // Draw board grid
-        function drawBoardGrid() {
-            const gridElement = boardElement.querySelector('.board-grid');
-            gridElement.innerHTML = '';
-            
-            // Draw horizontal lines
-            for (let i = 0; i < BOARD_ROWS; i++) {
-                const line = document.createElement('div');
-                line.style.position = 'absolute';
-                line.style.height = '2px';
-                line.style.width = '100%';
-                line.style.backgroundColor = 'black';
-                line.style.top = `${(i / (BOARD_ROWS - 1)) * 100}%`;
-                line.style.transform = 'translateY(-50%)';
-                gridElement.appendChild(line);
-            }
-            
-            // Draw vertical lines
-            for (let i = 0; i < BOARD_SIZE; i++) {
-                const line = document.createElement('div');
-                line.style.position = 'absolute';
-                line.style.width = '2px';
-                line.style.backgroundColor = 'black';
-                line.style.left = `${(i / (BOARD_SIZE - 1)) * 100}%`;
-                line.style.transform = 'translateX(-50%)';
-                
-                // Special case for the river area
-                if (i === 0 || i === BOARD_SIZE - 1) {
-                    line.style.height = '100%';
-                    line.style.top = '0';
-                } else {
-                    // Top section (above river)
-                    const topLine = line.cloneNode();
-                    topLine.style.height = '45%';
-                    topLine.style.top = '0';
-                    gridElement.appendChild(topLine);
-                    
-                    // Bottom section (below river)
-                    const bottomLine = line.cloneNode();
-                    bottomLine.style.height = '45%';
-                    bottomLine.style.bottom = '0';
-                    gridElement.appendChild(bottomLine);
-                    continue;
-                }
-                
-                gridElement.appendChild(line);
-            }
-        }
-
-        // Get possible moves for a piece
-        function getPossibleMoves(row, col) {
-            const piece = gameState.board[row][col];
-            if (!piece) return [];
-            
-            const moves = [];
-            
-            switch (piece.type) {
-                case 'pawn':
-                    getPawnMoves(row, col, piece.color, moves);
-                    break;
-                case 'rook':
-                    getRookMoves(row, col, piece.color, moves);
-                    break;
-                case 'horse':
-                    getHorseMoves(row, col, piece.color, moves);
-                    break;
-                case 'elephant':
-                    getElephantMoves(row, col, piece.color, moves);
-                    break;
-                case 'advisor':
-                    getAdvisorMoves(row, col, piece.color, moves);
-                    break;
-                case 'general':
-                    getGeneralMoves(row, col, piece.color, moves);
-                    break;
-                case 'cannon':
-                    getCannonMoves(row, col, piece.color, moves);
-                    break;
-            }
-            
-            return moves.filter(move => {
-                // Create a temporary board to check if the move would result in check
-                const tempBoard = JSON.parse(JSON.stringify(gameState.board));
-                tempBoard[move.row][move.col] = tempBoard[row][col];
-                tempBoard[row][col] = null;
-                
-                return !isInCheck(piece.color, tempBoard);
-            });
-        }
-
-        // Check if a move is valid
-        function isValidMove(fromRow, fromCol, toRow, toCol) {
-            // Check if the destination is within the board
-            if (toRow < 0 || toRow >= BOARD_ROWS || toCol < 0 || toCol >= BOARD_SIZE) {
-                return false;
-            }
-            
-            // Check if destination has a piece of the same color
-            const fromPiece = gameState.board[fromRow][fromCol];
-            const toPiece = gameState.board[toRow][toCol];
-            
-            if (toPiece && toPiece.color === fromPiece.color) {
-                return false;
-            }
-            
-            return true;
-        }
-
-        // Movement rules for each piece type
-        function getPawnMoves(row, col, color, moves) {
-            const directions = [];
-            
-            // Red pawns (moving up)
-            if (color === RED) {
-                directions.push([-1, 0]); // Forward
-                
-                // If pawn has crossed the river, it can move horizontally
-                if (row < 5) {
-                    directions.push([0, -1]); // Left
-                    directions.push([0, 1]);  // Right
-                }
-            } 
-            // Black pawns (moving down)
-            else {
-                directions.push([1, 0]); // Forward
-                
-                // If pawn has crossed the river, it can move horizontally
-                if (row > 4) {
-                    directions.push([0, -1]); // Left
-                    directions.push([0, 1]);  // Right
-                }
-            }
-            
-            for (const [dr, dc] of directions) {
-                const newRow = row + dr;
-                const newCol = col + dc;
-                
-                if (isValidMove(row, col, newRow, newCol)) {
-                    moves.push({ row: newRow, col: newCol });
-                }
-            }
-        }
-
-        function getRookMoves(row, col, color, moves) {
-            // Rook moves horizontally and vertically any number of spaces
-            const directions = [
-                [-1, 0], // Up
-                [1, 0],  // Down
-                [0, -1], // Left
-                [0, 1]   // Right
-            ];
-            
-            for (const [dr, dc] of directions) {
-                let newRow = row + dr;
-                let newCol = col + dc;
-                
-                while (newRow >= 0 && newRow < BOARD_ROWS && newCol >= 0 && newCol < BOARD_SIZE) {
-                    if (gameState.board[newRow][newCol] === null) {
-                        // Empty space, can move here
-                        moves.push({ row: newRow, col: newCol });
-                    } else {
-                        // Encountered a piece
-                        if (gameState.board[newRow][newCol].color !== color) {
-                            // Enemy piece, can capture
-                            moves.push({ row: newRow, col: newCol });
-                        }
-                        // Stop looking in this direction
-                        break;
-                    }
-                    
-                    newRow += dr;
-                    newCol += dc;
-                }
-            }
-        }
-
-        function getHorseMoves(row, col, color, moves) {
-            // Horse moves in an L-shape: 2 steps in one direction, then 1 step perpendicular
-            const possibleMoves = [
-                [-2, -1], [-2, 1], // Up 2, left/right 1
-                [2, -1], [2, 1],   // Down 2, left/right 1
-                [-1, -2], [1, -2], // Left 2, up/down 1
-                [-1, 2], [1, 2]    // Right 2, up/down 1
-            ];
-            
-            for (const [dr, dc] of possibleMoves) {
-                const newRow = row + dr;
-                const newCol = col + dc;
-                
-                // Check if the move is within the board and not blocked
-                if (isValidMove(row, col, newRow, newCol)) {
-                    // Check for blocking pieces (horse's leg)
-                    const blockRow = row + Math.sign(dr);
-                    const blockCol = col + Math.sign(dc);
-                    
-                    // If the move is primarily horizontal
-                    if (Math.abs(dc) > Math.abs(dr)) {
-                        const blockRow = row;
-                        const blockCol = col + Math.sign(dc) * 1;
-                        if (gameState.board[blockRow][blockCol] !== null) {
-                            continue; // Horse is blocked
-                        }
-                    } 
-                    // If the move is primarily vertical
-                    else {
-                        const blockRow = row + Math.sign(dr) * 1;
-                        const blockCol = col;
-                        if (gameState.board[blockRow][blockCol] !== null) {
-                            continue; // Horse is blocked
-                        }
-                    }
-                    
-                    moves.push({ row: newRow, col: newCol });
-                }
-            }
-        }
-
-        function getElephantMoves(row, col, color, moves) {
-            // Elephant moves diagonally by exactly 2 points
-            const possibleMoves = [
-                [-2, -2], [-2, 2], [2, -2], [2, 2]
-            ];
-            
-            for (const [dr, dc] of possibleMoves) {
-                const newRow = row + dr;
-                const newCol = col + dc;
-                
-                // Check if the move is within the board and within the correct half
-                if (newRow >= 0 && newRow < BOARD_ROWS && newCol >= 0 && newCol < BOARD_SIZE) {
-                    // Elephants cannot cross the river
-                    if ((color === RED && newRow < 5) || (color === BLACK && newRow > 4)) {
-                        continue;
-                    }
-                    
-                    // Check for blocking piece at the middle point (elephant's eye)
-                    const midRow = row + dr / 2;
-                    const midCol = col + dc / 2;
-                    
-                    if (gameState.board[midRow][midCol] !== null) {
-                        continue; // Elephant is blocked
-                    }
-                    
-                    // Check if destination is empty or has enemy piece
-                    if (gameState.board[newRow][newCol] === null || 
-                        gameState.board[newRow][newCol].color !== color) {
-                        moves.push({ row: newRow, col: newCol });
-                    }
-                }
-            }
-        }
-
-        function getAdvisorMoves(row, col, color, moves) {
-            // Advisor moves diagonally by 1 point within the palace
-            const possibleMoves = [
-                [-1, -1], [-1, 1], [1, -1], [1, 1]
-            ];
-            
-            for (const [dr, dc] of possibleMoves) {
-                const newRow = row + dr;
-                const newCol = col + dc;
-                
-                // Check if the move is within the palace
-                if (isWithinPalace(newRow, newCol, color) && isValidMove(row, col, newRow, newCol)) {
-                    moves.push({ row: newRow, col: newCol });
-                }
-            }
-        }
-
-        function getGeneralMoves(row, col, color, moves) {
-            // General moves horizontally or vertically by 1 point within the palace
-            const possibleMoves = [
-                [-1, 0], [1, 0], [0, -1], [0, 1]
-            ];
-            
-            for (const [dr, dc] of possibleMoves) {
-                const newRow = row + dr;
-                const newCol = col + dc;
-                
-                // Check if the move is within the palace
-                if (isWithinPalace(newRow, newCol, color) && isValidMove(row, col, newRow, newCol)) {
-                    moves.push({ row: newRow, col: newCol });
-                }
-            }
-            
-            // Check for "flying general" rule (generals facing each other with no pieces in between)
-            const oppositeColor = color === RED ? BLACK : RED;
-            let opponentGeneralCol = -1;
-            let opponentGeneralRow = -1;
-            
-            // Find opponent's general
-            for (let r = 0; r < BOARD_ROWS; r++) {
-                for (let c = 0; c < BOARD_SIZE; c++) {
-                    const piece = gameState.board[r][c];
-                    if (piece && piece.type === 'general' && piece.color === oppositeColor) {
-                        opponentGeneralRow = r;
-                        opponentGeneralCol = c;
-                        break;
-                    }
-                }
-                if (opponentGeneralCol !== -1) break;
-            }
-            
-            // Check if generals are in the same column
-            if (opponentGeneralCol === col) {
-                let piecesBetween = false;
-                const startRow = Math.min(row, opponentGeneralRow) + 1;
-                const endRow = Math.max(row, opponentGeneralRow);
-                
-                for (let r = startRow; r < endRow; r++) {
-                    if (gameState.board[r][col] !== null) {
-                        piecesBetween = true;
-                        break;
+                        board.appendChild(cell);
                     }
                 }
                 
-                if (!piecesBetween) {
-                    // Can capture the opponent's general via flying general
-                    moves.push({ row: opponentGeneralRow, col: opponentGeneralCol });
-                }
-            }
-        }
-
-        function getCannonMoves(row, col, color, moves) {
-            // Cannon moves like a rook, but needs a piece to jump over for captures
-            const directions = [
-                [-1, 0], [1, 0], [0, -1], [0, 1]
-            ];
-            
-            for (const [dr, dc] of directions) {
-                let newRow = row + dr;
-                let newCol = col + dc;
-                let jumpedOver = false;
-                
-                while (newRow >= 0 && newRow < BOARD_ROWS && newCol >= 0 && newCol < BOARD_SIZE) {
-                    if (!jumpedOver) {
-                        // Haven't jumped over a piece yet
-                        if (gameState.board[newRow][newCol] === null) {
-                            // Empty space, can move here
-                            moves.push({ row: newRow, col: newCol });
-                        } else {
-                            // Found a piece to jump over
-                            jumpedOver = true;
-                        }
-                    } else {
-                        // Already jumped over a piece
-                        if (gameState.board[newRow][newCol] !== null) {
-                            // Found another piece
-                            if (gameState.board[newRow][newCol].color !== color) {
-                                // Enemy piece, can capture
-                                moves.push({ row: newRow, col: newCol });
-                            }
-                            // Stop looking in this direction
-                            break;
-                        }
-                    }
-                    
-                    newRow += dr;
-                    newCol += dc;
-                }
-            }
-        }
-
-        // Helper function to check if a position is within the palace
-        function isWithinPalace(row, col, color) {
-            if (color === RED) {
-                // Red palace (bottom)
-                return row >= 7 && row <= 9 && col >= 3 && col <= 5;
-            } else {
-                // Black palace (top)
-                return row >= 0 && row <= 2 && col >= 3 && col <= 5;
-            }
-        }
-
-        // Check if a player is in check
-        function isInCheck(color, board = gameState.board) {
-            // Find the general's position
-            let generalRow = -1;
-            let generalCol = -1;
-            
-            for (let row = 0; row < BOARD_ROWS; row++) {
-                for (let col = 0; col < BOARD_SIZE; col++) {
-                    const piece = board[row][col];
-                    if (piece && piece.type === 'general' && piece.color === color) {
-                        generalRow = row;
-                        generalCol = col;
-                        break;
-                    }
-                }
-                if (generalRow !== -1) break;
-            }
-            
-            // Check if any opponent's piece can capture the general
-            const oppositeColor = color === RED ? BLACK : RED;
-            
-            for (let row = 0; row < BOARD_ROWS; row++) {
-                for (let col = 0; col < BOARD_SIZE; col++) {
-                    const piece = board[row][col];
-                    if (piece && piece.color === oppositeColor) {
-                        const moves = [];
-                        
-                        switch (piece.type) {
-                            case 'pawn':
-                                getPawnMoves(row, col, piece.color, moves);
-                                break;
-                            case 'rook':
-                                getRookMoves(row, col, piece.color, moves);
-                                break;
-                            case 'horse':
-                                getHorseMoves(row, col, piece.color, moves);
-                                break;
-                            case 'elephant':
-                                getElephantMoves(row, col, piece.color, moves);
-                                break;
-                            case 'advisor':
-                                getAdvisorMoves(row, col, piece.color, moves);
-                                break;
-                            case 'general':
-                                getGeneralMoves(row, col, piece.color, moves);
-                                break;
-                            case 'cannon':
-                                getCannonMoves(row, col, piece.color, moves);
-                                break;
-                        }
-                        
-                        // Check if any move can capture the general
-                        for (const move of moves) {
-                            if (move.row === generalRow && move.col === generalCol) {
-                                return true;
-                            }
-                        }
-                    }
-                }
-            }
-            
-            return false;
-        }
-
-        // Check if a player is in checkmate
-        function isCheckmate(color) {
-            // If not in check, not in checkmate
-            if (!isInCheck(color)) return false;
-            
-            // Try all possible moves for all pieces of the given color
-            for (let row = 0; row < BOARD_ROWS; row++) {
-                for (let col = 0; col < BOARD_SIZE; col++) {
-                    const piece = gameState.board[row][col];
-                    if (piece && piece.color === color) {
-                        const moves = getPossibleMoves(row, col);
-                        
-                        // If there are any legal moves, not in checkmate
-                        if (moves.length > 0) {
-                            return false;
-                        }
-                    }
-                }
-            }
-            
-            // No legal moves and in check - checkmate
-            return true;
-        }
-
-        // Generate a random game ID
-        function generateGameId() {
-            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-            let result = '';
-            for (let i = 0; i < 6; i++) {
-                result += chars.charAt(Math.floor(Math.random() * chars.length));
-            }
-            return result;
-        }
-
-        // Show a toast message
-        function showToast(message, duration = 3000) {
-            toastElement.textContent = message;
-            toastElement.classList.add('show');
-            setTimeout(() => {
-                toastElement.classList.remove('show');
-            }, duration);
-        }
-
-        // Add a chat message
-        function addChatMessage(sender, message) {
-            const messageElement = document.createElement('div');
-            messageElement.innerHTML = `<strong>${sender}:</strong> ${message}`;
-            chatMessagesElement.appendChild(messageElement);
-            chatMessagesElement.scrollTop = chatMessagesElement.scrollHeight;
-        }
-
-        // Update game status
-        function updateGameStatus() {
-            let statusText = "";
-            
-            if (gameState.status === "waiting") {
-                statusText = "等待玩家加入...";
-                resignButton.disabled = true;
-                drawButton.disabled = true;
-            } else if (gameState.status === "playing") {
-                const currentTurnText = gameState.currentTurn === RED ? "红方" : "黑方";
-                
-                // Check if the current player is in check
-                if (isInCheck(gameState.currentTurn)) {
-                    if (isCheckmate(gameState.currentTurn)) {
-                        statusText = `将军！${currentTurnText}被将死！`;
-                        gameState.status = "gameover";
-                        
-                        // Update game status in Firebase
-                        if (gameState.gameId) {
-                            update(ref(database, `games/${gameState.gameId}`), {
-                                status: "gameover",
-                                winner: gameState.currentTurn === RED ? BLACK : RED
-                            });
-                        }
-                    } else {
-                        statusText = `将军！${currentTurnText}走棋`;
-                    }
-                } else {
-                    statusText = `${currentTurnText}走棋`;
-                }
-                
-                // Enable/disable buttons based on player's turn
-                if (gameState.playerColor === gameState.currentTurn) {
-                    resignButton.disabled = false;
-                    drawButton.disabled = false;
-                } else {
-                    resignButton.disabled = true;
-                    drawButton.disabled = true;
-                }
-            } else if (gameState.status === "gameover") {
-                const winner = gameState.winner === RED ? "红方" : "黑方";
-                statusText = `游戏结束！${winner}胜利！`;
-                resignButton.disabled = true;
-                drawButton.disabled = true;
-            }
-            
-            gameStatusElement.textContent = statusText;
-        }
-
-        // Handle click on the board
-        function handleBoardClick(event) {
-            // Only allow moves if the game is active and it's the player's turn
-            if (gameState.status !== "playing" || gameState.currentTurn !== gameState.playerColor) {
-                return;
-            }
-            
-            const boardRect = boardElement.getBoundingClientRect();
-            const x = event.clientX - boardRect.left;
-            const y = event.clientY - boardRect.top;
-            
-            // Convert click position to board coordinates
-            const col = Math.round((x / boardRect.width) * (BOARD_SIZE - 1));
-            const row = Math.round((y / boardRect.height) * (BOARD_ROWS - 1));
-            
-            // Check if a piece was clicked
-            if (event.target.classList.contains('piece')) {
-                const clickedRow = parseInt(event.target.dataset.row);
-                const clickedCol = parseInt(event.target.dataset.col);
-                const clickedPiece = gameState.board[clickedRow][clickedCol];
-                
-                // If it's the player's piece, select it
-                if (clickedPiece && clickedPiece.color === gameState.playerColor) {
-                    gameState.selectedPiece = { row: clickedRow, col: clickedCol };
-                    gameState.possibleMoves = getPossibleMoves(clickedRow, clickedCol);
-                    renderBoard();
-                    return;
-                }
-            }
-            
-            // Check if a possible move was clicked
-            if (gameState.selectedPiece) {
-                const isPossibleMove = gameState.possibleMoves.some(move => 
-                    move.row === row && move.col === col
-                );
-                
-                if (isPossibleMove) {
-                    // Move the piece
-                    const fromRow = gameState.selectedPiece.row;
-                    const fromCol = gameState.selectedPiece.col;
-                    
-                    // Update the game state in Firebase
-                    if (gameState.gameId) {
-                        update(ref(database, `games/${gameState.gameId}`), {
-                            board: JSON.stringify(gameState.board),
-                            lastMove: {
-                                fromRow,
-                                fromCol,
-                                toRow: row,
-                                toCol: col
-                            },
-                            currentTurn: gameState.currentTurn === RED ? BLACK : RED
-                        });
-                    }
-                    
-                    // Clear selection
-                    gameState.selectedPiece = null;
-                    gameState.possibleMoves = [];
-                    
-                    renderBoard();
-                    return;
-                }
-            }
-            
-            // If no valid action, just clear the selection
-            gameState.selectedPiece = null;
-            gameState.possibleMoves = [];
-            renderBoard();
-        }
-
-        // Create a new game
-        function createNewGame() {
-            const playerName = newGameNameInput.value.trim() || "Player 1";
-            
-            if (!playerName) {
-                showToast("请输入您的名称");
-                return;
-            }
-            
-            // Generate a new game ID
-            const gameId = generateGameId();
-            gameState.gameId = gameId;
-            gameState.playerColor = RED; // Creator is always red
-            gameState.playerName = playerName;
-            gameState.redPlayerName = playerName;
-            gameState.status = "waiting";
-            
-            // Save the game to Firebase
-            set(ref(database, `games/${gameId}`), {
-                board: JSON.stringify(gameState.board),
-                redPlayer: playerName,
-                blackPlayer: "",
-                currentTurn: RED,
-                status: "waiting",
-                createdAt: Date.now()
-            });
-            
-            // Listen for game updates
-            setupGameListeners(gameId);
-            
-            // Update UI
-            gameIdElement.textContent = gameId;
-            redPlayerElement.textContent = `红方: ${playerName}`;
-            blackPlayerElement.textContent = `黑方: 等待加入...`;
-            
-            // Close the modal
-            newGameModal.classList.remove('active');
-            newGameNameInput.value = "";
-            
-            showToast(`游戏创建成功！ID: ${gameId}`);
-            updateGameStatus();
-        }
-
-        // Join an existing game
-        function joinGame() {
-            const gameId = joinGameInput.value.trim().toUpperCase();
-            const playerName = playerNameInput.value.trim() || "Player 2";
-            
-            if (!gameId) {
-                showToast("请输入游戏ID");
-                return;
-            }
-            
-            if (!playerName) {
-                showToast("请输入您的名称");
-                return;
-            }
-            
-            // Check if the game exists
-            const gameRef = ref(database, `games/${gameId}`);
-            onValue(gameRef, (snapshot) => {
-                if (snapshot.exists()) {
-                    const gameData = snapshot.val();
-                    
-                    if (gameData.status === "waiting") {
-                        // Join the game
-                        gameState.gameId = gameId;
-                        gameState.playerColor = BLACK; // Joiner is always black
-                        gameState.playerName = playerName;
-                        gameState.redPlayerName = gameData.redPlayer;
-                        gameState.blackPlayerName = playerName;
-                        gameState.status = "playing";
-                        
-                        // Update the game in Firebase
-                        update(ref(database, `games/${gameId}`), {
-                            blackPlayer: playerName,
-                            status: "playing"
-                        });
-                        
-                        // Listen for game updates
-                        setupGameListeners(gameId);
-                        
-                        // Update UI
-                        gameIdElement.textContent = gameId;
-                        redPlayerElement.textContent = `红方: ${gameData.redPlayer}`;
-                        blackPlayerElement.textContent = `黑方: ${playerName}`;
-                        
-                        // Close the modal
-                        joinGameModal.classList.remove('active');
-                        joinGameInput.value = "";
-                        playerNameInput.value = "";
-                        
-                        showToast("成功加入游戏！");
-                        updateGameStatus();
-                    } else {
-                        showToast("无法加入游戏，游戏已开始或已结束");
-                    }
-                } else {
-                    showToast("游戏不存在");
-                }
-            }, {
-                onlyOnce: true
-            });
-        }
-
-        // Setup Firebase listeners for the game
-        function setupGameListeners(gameId) {
-            const gameRef = ref(database, `games/${gameId}`);
-            
-            // Listen for game updates
-            onValue(gameRef, (snapshot) => {
-                if (snapshot.exists()) {
-                    const gameData = snapshot.val();
-                    
-                    // Update local game state
-                    gameState.redPlayerName = gameData.redPlayer;
-                    gameState.blackPlayerName = gameData.blackPlayer || "等待加入...";
-                    gameState.currentTurn = gameData.currentTurn;
-                    gameState.status = gameData.status;
-                    gameState.winner = gameData.winner;
-                    
-                    // Update the board if there was a move
-                    if (gameData.board) {
-                        gameState.board = JSON.parse(gameData.board);
-                    }
-                    
-                    // Update UI
-                    redPlayerElement.textContent = `红方: ${gameState.redPlayerName}`;
-                    blackPlayerElement.textContent = `黑方: ${gameState.blackPlayerName}`;
-                    renderBoard();
-                    updateGameStatus();
-                    
-                    // Handle player joining
-                    if (gameState.playerColor === RED && gameData.status === "playing" && gameData.blackPlayer) {
-                        showToast(`${gameData.blackPlayer} 加入了游戏！`);
-                    }
-                    
-                    // Handle game over
-                    if (gameData.status === "gameover" && gameData.winner) {
-                        const winnerText = gameData.winner === RED ? "红方" : "黑方";
-                        showToast(`游戏结束！${winnerText}胜利！`);
-                    }
-                }
-            });
-            
-            // Listen for chat messages
-            const chatRef = ref(database, `chats/${gameId}`);
-            onValue(chatRef, (snapshot) => {
-                if (snapshot.exists()) {
-                    const messages = snapshot.val();
-                    
-                    // Clear the chat container first
-                    chatMessagesElement.innerHTML = "";
-                    
-                    // Add all messages
-                    Object.values(messages).forEach(message => {
-                        addChatMessage(message.sender, message.text);
+                // 显示可能的移动位置
+                if (gameState.possibleMoves.length > 0) {
+                    gameState.possibleMoves.forEach(move => {
+                        const cell = board.querySelector(`[data-row="${move.row}"][data-col="${move.col}"]`);
+                        const moveMarker = document.createElement('div');
+                        moveMarker.className = 'possible-move';
+                        cell.appendChild(moveMarker);
                     });
                 }
-            });
-        }
-
-        // Send a chat message
-        function sendMessage() {
-            const message = messageInput.value.trim();
-            
-            if (!message || !gameState.gameId) return;
-            
-            // Add the message to Firebase
-            const chatRef = ref(database, `chats/${gameState.gameId}`);
-            const newMessageRef = push(chatRef);
-            set(newMessageRef, {
-                sender: gameState.playerName,
-                text: message,
-                timestamp: Date.now()
-            });
-            
-            // Clear the input
-            messageInput.value = "";
-        }
-
-        // Handle resignation
-        function resignGame() {
-            if (!gameState.gameId || gameState.status !== "playing") return;
-            
-            // Set the winner as the opponent
-            const winner = gameState.playerColor === RED ? BLACK : RED;
-            
-            // Update the game in Firebase
-            update(ref(database, `games/${gameState.gameId}`), {
-                status: "gameover",
-                winner: winner
-            });
-            
-            // Add a system message
-            const chatRef = ref(database, `chats/${gameState.gameId}`);
-            const newMessageRef = push(chatRef);
-            set(newMessageRef, {
-                sender: "系统",
-                text: `${gameState.playerName} 认输`,
-                timestamp: Date.now()
-            });
-            
-            showToast("您已认输，游戏结束");
-        }
-
-        // Copy game ID to clipboard
-        function copyGameId() {
-            if (!gameState.gameId) return;
-            
-            navigator.clipboard.writeText(gameState.gameId)
-                .then(() => {
-                    showToast("游戏ID已复制到剪贴板");
-                })
-                .catch(err => {
-                    console.error('复制失败: ', err);
-                    showToast("复制失败");
-                });
-        }
-
-        // Event listeners
-        boardElement.addEventListener('click', handleBoardClick);
-        newGameButton.addEventListener('click', () => newGameModal.classList.add('active'));
-        confirmNewGameButton.addEventListener('click', createNewGame);
-        cancelNewGameButton.addEventListener('click', () => newGameModal.classList.remove('active'));
-        joinGameButton.addEventListener('click', () => joinGameModal.classList.add('active'));
-        confirmJoinButton.addEventListener('click', joinGame);
-        cancelJoinButton.addEventListener('click', () => joinGameModal.classList.remove('active'));
-        copyGameIdButton.addEventListener('click', copyGameId);
-        resignButton.addEventListener('click', resignGame);
-        sendMessageButton.addEventListener('click', sendMessage);
-        messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                sendMessage();
+                
+                // 高亮选中的棋子
+                if (gameState.selectedPiece) {
+                    const selected = board.querySelector(`[data-row="${gameState.selectedPiece.row}"][data-col="${gameState.selectedPiece.col}"] .piece`);
+                    if (selected) {
+                        selected.classList.add('selected');
+                    }
+                }
+                
+                // 更新玩家信息显示
+                playerRed.classList.toggle('current-player', gameState.currentPlayer === 'red');
+                playerBlack.classList.toggle('current-player', gameState.currentPlayer === 'black');
+                
+                // 更新游戏状态
+                if (gameState.gameOver) {
+                    gameStatus.textContent = gameState.winner ? `${gameState.winner === 'red' ? '红方' : '黑方'}胜利!` : '游戏结束';
+                } else {
+                    gameStatus.textContent = `${gameState.currentPlayer === 'red' ? '红方' : '黑方'}走棋`;
+                }
             }
+            
+            // 获取棋子可能的移动位置
+            function getPossibleMoves(row, col) {
+                const piece = gameState.board[row][col];
+                if (!piece) return [];
+                
+                const moves = [];
+                
+                switch (piece.type) {
+                    case 'pawn': // 兵/卒
+                        if (piece.color === 'red') {
+                            // 红方兵向上移动
+                            if (row > 0) moves.push({ row: row - 1, col: col });
+                            // 过河后可以向左右移动
+                            if (row < 5) {
+                                if (col > 0) moves.push({ row: row, col: col - 1 });
+                                if (col < 8) moves.push({ row: row, col: col + 1 });
+                            }
+                        } else {
+                            // 黑方卒向下移动
+                            if (row < 9) moves.push({ row: row + 1, col: col });
+                            // 过河后可以向左右移动
+                            if (row > 4) {
+                                if (col > 0) moves.push({ row: row, col: col - 1 });
+                                if (col < 8) moves.push({ row: row, col: col + 1 });
+                            }
+                        }
+                        break;
+                        
+                    case 'rook': // 车
+                        // 向上移动
+                        for (let r = row - 1; r >= 0; r--) {
+                            moves.push({ row: r, col: col });
+                            if (gameState.board[r][col]) break;
+                        }
+                        // 向下移动
+                        for (let r = row + 1; r < 10; r++) {
+                            moves.push({ row: r, col: col });
+                            if (gameState.board[r][col]) break;
+                        }
+                        // 向左移动
+                        for (let c = col - 1; c >= 0; c--) {
+                            moves.push({ row: row, col: c });
+                            if (gameState.board[row][c]) break;
+                        }
+                        // 向右移动
+                        for (let c = col + 1; c < 9; c++) {
+                            moves.push({ row: row, col: c });
+                            if (gameState.board[row][c]) break;
+                        }
+                        break;
+                        
+                    case 'horse': // 马
+                        const horseDirections = [
+                            { dr: -2, dc: -1 }, { dr: -2, dc: 1 },
+                            { dr: -1, dc: -2 }, { dr: -1, dc: 2 },
+                            { dr: 1, dc: -2 }, { dr: 1, dc: 2 },
+                            { dr: 2, dc: -1 }, { dr: 2, dc: 1 }
+                        ];
+                        
+                        horseDirections.forEach(dir => {
+                            const newRow = row + dir.dr;
+                            const newCol = col + dir.dc;
+                            
+                            // 检查是否在棋盘内
+                            if (newRow >= 0 && newRow < 10 && newCol >= 0 && newCol < 9) {
+                                // 检查马腿是否被卡住
+                                const legRow = row + Math.sign(dir.dr);
+                                const legCol = col + Math.sign(dir.dc);
+                                
+                                if (!gameState.board[legRow][legCol]) {
+                                    moves.push({ row: newRow, col: newCol });
+                                }
+                            }
+                        });
+                        break;
+                        
+                    case 'elephant': // 相/象
+                        const elephantDirections = [
+                            { dr: -2, dc: -2 }, { dr: -2, dc: 2 },
+                            { dr: 2, dc: -2 }, { dr: 2, dc: 2 }
+                        ];
+                        
+                        elephantDirections.forEach(dir => {
+                            const newRow = row + dir.dr;
+                            const newCol = col + dir.dc;
+                            
+                            // 检查是否在棋盘内且不过河
+                            if (newRow >= 0 && newRow < 10 && newCol >= 0 && newCol < 9 &&
+                                ((piece.color === 'red' && newRow >= 5) || (piece.color === 'black' && newRow <= 4))) {
+                                
+                                // 检查象眼是否被堵住
+                                const eyeRow = row + dir.dr / 2;
+                                const eyeCol = col + dir.dc / 2;
+                                
+                                if (!gameState.board[eyeRow][eyeCol]) {
+                                    moves.push({ row: newRow, col: newCol });
+                                }
+                            }
+                        });
+                        break;
+                        
+                    case 'advisor': // 仕/士
+                        const advisorDirections = [
+                            { dr: -1, dc: -1 }, { dr: -1, dc: 1 },
+                            { dr: 1, dc: -1 }, { dr: 1, dc: 1 }
+                        ];
+                        
+                        advisorDirections.forEach(dir => {
+                            const newRow = row + dir.dr;
+                            const newCol = col + dir.dc;
+                            
+                            // 检查是否在九宫格内
+                            if (newCol >= 3 && newCol <= 5 && 
+                                ((piece.color === 'red' && newRow >= 7 && newRow <= 9) || 
+                                 (piece.color === 'black' && newRow >= 0 && newRow <= 2))) {
+                                moves.push({ row: newRow, col: newCol });
+                            }
+                        });
+                        break;
+                        
+                    case 'general': // 将/帅
+                        const generalDirections = [
+                            { dr: -1, dc: 0 }, { dr: 1, dc: 0 },
+                            { dr: 0, dc: -1 }, { dr: 0, dc: 1 }
+                        ];
+                        
+                        generalDirections.forEach(dir => {
+                            const newRow = row + dir.dr;
+                            const newCol = col + dir.dc;
+                            
+                            // 检查是否在九宫格内
+                            if (newCol >= 3 && newCol <= 5 && 
+                                ((piece.color === 'red' && newRow >= 7 && newRow <= 9) || 
+                                 (piece.color === 'black' && newRow >= 0 && newRow <= 2))) {
+                                moves.push({ row: newRow, col: newCol });
+                            }
+                        });
+                        
+                        // 将帅对脸特殊情况检测
+                        if (piece.color === 'red') {
+                            // 向上查找黑将
+                            for (let r = row - 1; r >= 0; r--) {
+                                if (gameState.board[r][col]) {
+                                    if (gameState.board[r][col].type === 'general' && gameState.board[r][col].color === 'black') {
+                                        moves.push({ row: r, col: col });
+                                    }
+                                    break;
+                                }
+                            }
+                        } else {
+                            // 向下查找红帅
+                            for (let r = row + 1; r < 10; r++) {
+                                if (gameState.board[r][col]) {
+                                    if (gameState.board[r][col].type === 'general' && gameState.board[r][col].color === 'red') {
+                                        moves.push({ row: r, col: col });
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                        break;
+                        
+                    case 'cannon': // 炮
+                        // 向上移动
+                        let jumpedUp = false;
+                        for (let r = row - 1; r >= 0; r--) {
+                            if (!gameState.board[r][col] && !jumpedUp) {
+                                moves.push({ row: r, col: col });
+                            } else if (!jumpedUp) {
+                                jumpedUp = true;
+                            } else if (gameState.board[r][col]) {
+                                moves.push({ row: r, col: col });
+                                break;
+                            }
+                        }
+                        
+                        // 向下移动
+                        let jumpedDown = false;
+                        for (let r = row + 1; r < 10; r++) {
+                            if (!gameState.board[r][col] && !jumpedDown) {
+                                moves.push({ row: r, col: col });
+                            } else if (!jumpedDown) {
+                                jumpedDown = true;
+                            } else if (gameState.board[r][col]) {
+                                moves.push({ row: r, col: col });
+                                break;
+                            }
+                        }
+                        
+                        // 向左移动
+                        let jumpedLeft = false;
+                        for (let c = col - 1; c >= 0; c--) {
+                            if (!gameState.board[row][c] && !jumpedLeft) {
+                                moves.push({ row: row, col: c });
+                            } else if (!jumpedLeft) {
+                                jumpedLeft = true;
+                            } else if (gameState.board[row][c]) {
+                                moves.push({ row: row, col: c });
+                                break;
+                            }
+                        }
+                        
+                        // 向右移动
+                        let jumpedRight = false;
+                        for (let c = col + 1; c < 9; c++) {
+                            if (!gameState.board[row][c] && !jumpedRight) {
+                                moves.push({ row: row, col: c });
+                            } else if (!jumpedRight) {
+                                jumpedRight = true;
+                            } else if (gameState.board[row][c]) {
+                                moves.push({ row: row, col: c });
+                                break;
+                            }
+                        }
+                        break;
+                }
+                
+                // 过滤掉不能移动的位置（已有己方棋子的位置）
+                return moves.filter(move => {
+                    const targetPiece = gameState.board[move.row][move.col];
+                    return !targetPiece || targetPiece.color !== piece.color;
+                });
+            }
+            
+            // 检查移动是否合法
+            function isValidMove(fromRow, fromCol, toRow, toCol) {
+                const possibleMoves = getPossibleMoves(fromRow, fromCol);
+                return possibleMoves.some(move => move.row === toRow && move.col === toCol);
+            }
+            
+            // 移动棋子
+            function movePiece(fromRow, fromCol, toRow, toCol) {
+                // 保存历史记录
+                const historyEntry = {
+                    fromRow,
+                    fromCol,
+                    toRow,
+                    toCol,
+                    capturedPiece: gameState.board[toRow][toCol],
+                    currentPlayer: gameState.currentPlayer
+                };
+                gameState.history.push(historyEntry);
+                
+                // 移动棋子
+                gameState.board[toRow][toCol] = gameState.board[fromRow][fromCol];
+                gameState.board[fromRow][fromCol] = null;
+                
+                // 检查游戏是否结束
+                if (historyEntry.capturedPiece && historyEntry.capturedPiece.type === 'general') {
+                    gameState.gameOver = true;
+                    gameState.winner = gameState.currentPlayer;
+                    showGameOverModal();
+                }
+                
+                // 切换玩家
+                gameState.currentPlayer = gameState.currentPlayer === 'red' ? 'black' : 'red';
+                
+                // 清除选择状态
+                gameState.selectedPiece = null;
+                gameState.possibleMoves = [];
+                
+                // 更新在线游戏状态
+                if (gameState.roomId) {
+                    updateGameInFirebase();
+                }
+                
+                // 重新渲染棋盘
+                renderBoard();
+            }
+            
+            // 点击棋盘事件处理
+            function handleBoardClick(event) {
+                if (gameState.gameOver) return;
+                
+                // 在联机模式下检查是否轮到当前玩家行动
+                if (gameState.roomId && gameState.playerColor !== gameState.currentPlayer && !gameState.spectating) {
+                    showNotification('还没轮到你行动');
+                    return;
+                }
+                
+                // 在观战模式下不能移动棋子
+                if (gameState.spectating) {
+                    showNotification('你正在观战模式');
+                    return;
+                }
+                
+                const target = event.target;
+                const cell = target.closest('.cell');
+                if (!cell) return;
+                
+                const row = parseInt(cell.dataset.row);
+                const col = parseInt(cell.dataset.col);
+                
+                // 如果已经选择了棋子
+                if (gameState.selectedPiece) {
+                    // 点击了可能的移动位置
+                    if (gameState.possibleMoves.some(move => move.row === row && move.col === col)) {
+                        movePiece(
+                            gameState.selectedPiece.row,
+                            gameState.selectedPiece.col,
+                            row,
+                            col
+                        );
+                    } else {
+                        // 选择了新的棋子
+                        const piece = gameState.board[row][col];
+                        if (piece && piece.color === gameState.currentPlayer) {
+                            gameState.selectedPiece = { row, col };
+                            gameState.possibleMoves = getPossibleMoves(row, col);
+                            renderBoard();
+                        } else {
+                            // 点击了空白区域，取消选择
+                            gameState.selectedPiece = null;
+                            gameState.possibleMoves = [];
+                            renderBoard();
+                        }
+                    }
+                } else {
+                    // 选择新棋子
+                    const piece = gameState.board[row][col];
+                    if (piece && piece.color === gameState.currentPlayer) {
+                        gameState.selectedPiece = { row, col };
+                        gameState.possibleMoves = getPossibleMoves(row, col);
+                        renderBoard();
+                    }
+                }
+            }
+            
+            // 悔棋
+            function undoMove() {
+                if (gameState.history.length === 0) return;
+                
+                // 在联机模式下检查
+                if (gameState.roomId && !gameState.spectating) {
+                    showNotification('联机模式不支持悔棋');
+                    return;
+                }
+                
+                const lastMove = gameState.history.pop();
+                
+                // 恢复棋子位置
+                gameState.board[lastMove.fromRow][lastMove.fromCol] = gameState.board[lastMove.toRow][lastMove.toCol];
+                gameState.board[lastMove.toRow][lastMove.toCol] = lastMove.capturedPiece;
+                
+                // 恢复当前玩家
+                gameState.currentPlayer = lastMove.currentPlayer;
+                
+                // 恢复游戏状态
+                gameState.gameOver = false;
+                gameState.winner = null;
+                
+                // 清除选择状态
+                gameState.selectedPiece = null;
+                gameState.possibleMoves = [];
+                
+                // 重新渲染棋盘
+                renderBoard();
+            }
+            
+            // 认输
+            function resign() {
+                if (gameState.gameOver) return;
+                
+                // 在联机模式下检查
+                if (gameState.roomId && gameState.playerColor !== gameState.currentPlayer) {
+                    showNotification('还没轮到你行动');
+                    return;
+                }
+                
+                gameState.gameOver = true;
+                gameState.winner = gameState.currentPlayer === 'red' ? 'black' : 'red';
+                
+                // 更新在线游戏状态
+                if (gameState.roomId) {
+                    updateGameInFirebase();
+                }
+                
+                showGameOverModal();
+                renderBoard();
+            }
+            
+            // 显示游戏结束弹窗
+            function showGameOverModal() {
+                winnerMessage.textContent = gameState.winner ? 
+                    `${gameState.winner === 'red' ? '红方' : '黑方'}胜利!` : 
+                    '游戏结束';
+                gameOverModal.style.display = 'flex';
+            }
+            
+            // 显示通知
+            function showNotification(message) {
+                notification.textContent = message;
+                notification.style.display = 'block';
+                
+                setTimeout(() => {
+                    notification.style.display = 'none';
+                }, 2000);
+            }
+            
+            // 新游戏
+            function newGame() {
+                gameState.board = initBoard();
+                gameState.currentPlayer = 'red';
+                gameState.selectedPiece = null;
+                gameState.possibleMoves = [];
+                gameState.history = [];
+                gameState.gameOver = false;
+                gameState.winner = null;
+                
+                // 更新在线游戏状态
+                if (gameState.roomId) {
+                    updateGameInFirebase();
+                }
+                
+                renderBoard();
+                gameOverModal.style.display = 'none';
+            }
+            
+            // 创建在线房间
+            function createRoom() {
+                const randomRoomId = Math.random().toString(36).substring(2, 10);
+                roomIdInput.value = randomRoomId;
+                
+                gameState.playerId = Math.random().toString(36).substring(2, 10);
+                gameState.playerColor = 'red';
+                gameState.roomId = randomRoomId;
+                gameState.spectating = false;
+                
+                // 初始化新游戏
+                newGame();
+                
+                // 创建房间数据
+                const roomData = {
+                    roomId: randomRoomId,
+                    redPlayer: gameState.playerId,
+                    blackPlayer: null,
+                    currentPlayer: gameState.currentPlayer,
+                    board: JSON.stringify(gameState.board),
+                    gameOver: gameState.gameOver,
+                    winner: gameState.winner,
+                    lastUpdate: Date.now()
+                };
+                
+                // 写入Firebase
+                set(ref(database, 'rooms/' + randomRoomId), roomData);
+                
+                // 监听房间更新
+                listenToRoom(randomRoomId);
+                
+                roomInfo.textContent = `房间创建成功! ID: ${randomRoomId}`;
+                showNotification('房间创建成功!');
+            }
+            
+            // 加入房间
+            function joinRoom() {
+                const roomId = roomIdInput.value.trim();
+                if (!roomId) {
+                    showNotification('请输入房间ID');
+                    return;
+                }
+                
+                gameState.playerId = Math.random().toString(36).substring(2, 10);
+                gameState.roomId = roomId;
+                
+                // 获取房间数据
+                onValue(ref(database, 'rooms/' + roomId), (snapshot) => {
+                    const roomData = snapshot.val();
+                    
+                    if (!roomData) {
+                        showNotification('房间不存在');
+                        return;
+                    }
+                    
+                    // 确定玩家角色
+                    if (!roomData.blackPlayer) {
+                        // 加入为黑方
+                        gameState.playerColor = 'black';
+                        gameState.spectating = false;
+                        
+                        // 更新房间数据
+                        update(ref(database, 'rooms/' + roomId), {
+                            blackPlayer: gameState.playerId
+                        });
+                        
+                        roomInfo.textContent = `已加入房间! ID: ${roomId} (黑方)`;
+                        blackName.textContent = '你';
+                        redName.textContent = '对手';
+                    } else {
+                        // 作为观众加入
+                        gameState.spectating = true;
+                        roomInfo.textContent = `作为观众加入房间! ID: ${roomId}`;
+                        redName.textContent = '玩家1';
+                        blackName.textContent = '玩家2';
+                    }
+                    
+                    // 监听房间更新
+                    listenToRoom(roomId);
+                });
+            }
+            
+            // 监听房间更新
+            function listenToRoom(roomId) {
+                onValue(ref(database, 'rooms/' + roomId), (snapshot) => {
+                    const roomData = snapshot.val();
+                    
+                    if (!roomData) return;
+                    
+                    // 更新游戏状态
+                    gameState.board = JSON.parse(roomData.board);
+                    gameState.currentPlayer = roomData.currentPlayer;
+                    gameState.gameOver = roomData.gameOver;
+                    gameState.winner = roomData.winner;
+                    
+                    // 如果游戏结束，显示结果
+                    if (gameState.gameOver) {
+                        showGameOverModal();
+                    }
+                    
+                    // 更新玩家信息
+                    if (!gameState.spectating) {
+                        if (gameState.playerColor === 'red') {
+                            redName.textContent = '你';
+                            blackName.textContent = roomData.blackPlayer ? '对手' : '等待加入...';
+                        } else {
+                            blackName.textContent = '你';
+                            redName.textContent = '对手';
+                        }
+                    }
+                    
+                    // 重新渲染棋盘
+                    renderBoard();
+                });
+            }
+            
+            // 更新游戏状态到Firebase
+            function updateGameInFirebase() {
+                update(ref(database, 'rooms/' + gameState.roomId), {
+                    currentPlayer: gameState.currentPlayer,
+                    board: JSON.stringify(gameState.board),
+                    gameOver: gameState.gameOver,
+                    winner: gameState.winner,
+                    lastUpdate: Date.now()
+                });
+            }
+            
+            // 事件绑定
+            board.addEventListener('click', handleBoardClick);
+            newGameBtn.addEventListener('click', newGame);
+            undoBtn.addEventListener('click', undoMove);
+            resignBtn.addEventListener('click', resign);
+            createRoomBtn.addEventListener('click', createRoom);
+            joinRoomBtn.addEventListener('click', joinRoom);
+            playAgainBtn.addEventListener('click', newGame);
+            
+            // 初始化游戏
+            gameState.board = initBoard();
+            renderBoard();
         });
-
-        // Initialize the board grid
-        drawBoardGrid();
-        renderBoard();
     </script>
 </body>
 </html>
