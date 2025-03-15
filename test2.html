@@ -3,292 +3,197 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>联机五子棋</title>
+    <title>Online Gomoku</title>
     <style>
-        :root {
-            --primary-color: #4e73df;
-            --secondary-color: #f6c23e;
-            --dark-color: #2e3951;
-            --light-color: #f8f9fc;
-            --success-color: #1cc88a;
-            --danger-color: #e74a3b;
-        }
-        
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
-        
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-            height: 100vh;
+            font-family: 'Arial', sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #f5f5f5;
             padding: 20px;
-            color: var(--dark-color);
         }
-        
         .container {
             width: 100%;
-            max-width: 800px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            background-color: rgba(255, 255, 255, 0.9);
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-        
-        h1 {
-            margin-bottom: 20px;
-            color: var(--primary-color);
-            text-align: center;
-        }
-        
-        .game-info {
-            width: 100%;
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-        
-        .player-info {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 10px 15px;
-            border-radius: 8px;
-            background-color: var(--light-color);
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
-            min-width: 120px;
-            margin: 5px;
-        }
-        
-        .player-black {
-            border-left: 4px solid #000;
-        }
-        
-        .player-white {
-            border-left: 4px solid #fff;
-            border-right: 1px solid #ccc;
-        }
-        
-        .status {
-            width: 100%;
-            padding: 10px;
-            text-align: center;
-            border-radius: 8px;
-            background-color: var(--light-color);
-            color: var(--dark-color);
-            margin: 10px 0;
-            font-weight: bold;
-        }
-        
-        .active {
-            background-color: var(--success-color);
-            color: white;
-        }
-        
-        .room-controls {
-            width: 100%;
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            margin-bottom: 15px;
-            gap: 10px;
-        }
-        
-        .board-container {
-            position: relative;
-            width: 100%;
-            max-width: 500px;
-            aspect-ratio: 1/1;
+            max-width: 600px;
             margin: 0 auto;
         }
-        
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        .game-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+        .board-container {
+            width: 100%;
+            position: relative;
+            margin-bottom: 20px;
+        }
+        .board-container:after {
+            content: "";
+            display: block;
+            padding-bottom: 100%;
+        }
         .board {
             position: absolute;
-            top: 0;
-            left: 0;
             width: 100%;
             height: 100%;
-            background-color: #deb887;
+            background-color: #DEB887;
+            border: 2px solid #8B4513;
             border-radius: 5px;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-            display: grid;
-            grid-template-columns: repeat(15, 1fr);
-            grid-template-rows: repeat(15, 1fr);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
             overflow: hidden;
+            touch-action: manipulation;
         }
-        
-        .grid-lines {
+        .grid {
             position: absolute;
-            top: 0;
-            left: 0;
+            width: calc(100% - 20px);
+            height: calc(100% - 20px);
+            top: 10px;
+            left: 10px;
+        }
+        .grid-line {
+            position: absolute;
+            background-color: #8B4513;
+        }
+        .horizontal {
             width: 100%;
+            height: 1px;
+        }
+        .vertical {
             height: 100%;
-            pointer-events: none;
+            width: 1px;
         }
-        
-        .cell {
-            position: relative;
-            cursor: pointer;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        
-        .cell:hover::before {
-            content: '';
-            position: absolute;
-            width: 60%;
-            height: 60%;
-            border-radius: 50%;
-            background-color: rgba(0, 0, 0, 0.2);
-        }
-        
         .stone {
-            width: 80%;
-            height: 80%;
-            border-radius: 50%;
             position: absolute;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 2px 3px rgba(0, 0, 0, 0.3);
         }
-        
-        .black {
-            background: radial-gradient(circle at 30% 30%, #666, #000);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+        .black-stone {
+            background-color: #333;
         }
-        
-        .white {
-            background: radial-gradient(circle at 30% 30%, #fff, #ddd);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        .white-stone {
+            background-color: #fff;
         }
-        
-        .btn {
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        button {
             padding: 10px 15px;
+            background-color: #4CAF50;
+            color: white;
             border: none;
-            border-radius: 5px;
-            background-color: var(--primary-color);
-            color: white;
-            font-weight: bold;
+            border-radius: 4px;
             cursor: pointer;
-            transition: all 0.3s ease;
+            font-size: 16px;
         }
-        
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
         }
-        
-        .btn-secondary {
-            background-color: var(--secondary-color);
-            color: var(--dark-color);
+        .game-id-container {
+            margin-top: 10px;
+            text-align: center;
         }
-        
-        input {
+        #gameIdDisplay {
+            font-weight: bold;
+            word-break: break-all;
+        }
+        .status-message {
+            margin: 15px 0;
             padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            outline: none;
-            width: 150px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            text-align: center;
+            font-size: 16px;
         }
-        
-        input:focus {
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 2px rgba(78, 115, 223, 0.2);
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(0,0,0,0.3);
+            border-radius: 50%;
+            border-top-color: #4CAF50;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
         }
-        
-        .notification {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 15px 20px;
-            background-color: var(--success-color);
-            color: white;
-            border-radius: 5px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            transform: translateX(200%);
-            transition: transform 0.3s ease;
-            z-index: 1000;
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
-        
-        .notification.show {
-            transform: translateX(0);
-        }
-        
-        @media (max-width: 600px) {
+        @media (max-width: 500px) {
+            h1 {
+                font-size: 24px;
+            }
             .game-info {
-                flex-direction: column;
-                align-items: center;
+                font-size: 14px;
             }
-            
-            .player-info {
-                width: 100%;
-                margin-bottom: 10px;
-            }
-            
-            .board-container {
-                width: 90%;
-            }
-            
-            .room-controls {
-                flex-direction: column;
-                align-items: center;
-            }
-            
-            .btn, input {
-                width: 100%;
-                margin-bottom: 10px;
+            button {
+                font-size: 14px;
+                padding: 8px 12px;
             }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>在线五子棋</h1>
-        
-        <div class="room-controls">
-            <input type="text" id="roomId" placeholder="房间ID">
-            <button class="btn" id="createRoom">创建房间</button>
-            <button class="btn" id="joinRoom">加入房间</button>
-            <button class="btn btn-secondary" id="leaveRoom">离开房间</button>
+        <div class="header">
+            <h1>Online Gomoku (Five in a Row)</h1>
         </div>
-        
+
+        <div class="status-message" id="statusMessage">
+            <div class="loading-spinner"></div>
+            Connecting to server...
+        </div>
+
         <div class="game-info">
-            <div class="player-info player-black">
-                <div>黑方</div>
-                <div id="playerBlack">等待加入...</div>
-            </div>
-            
-            <div class="status" id="gameStatus">请创建或加入房间</div>
-            
-            <div class="player-info player-white">
-                <div>白方</div>
-                <div id="playerWhite">等待加入...</div>
+            <div>Player: <span id="playerInfo">Connecting...</span></div>
+            <div>Turn: <span id="turnInfo">-</span></div>
+        </div>
+
+        <div class="board-container">
+            <div class="board" id="board">
+                <div class="grid" id="grid"></div>
             </div>
         </div>
-        
-        <div class="board-container">
-            <div class="board" id="board"></div>
-            <svg class="grid-lines" id="gridLines"></svg>
+
+        <div class="controls">
+            <button id="newGameBtn" disabled>Create New Game</button>
+            <div style="display: flex; gap: 10px;">
+                <input type="text" id="joinGameId" placeholder="Game ID" style="flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px;">
+                <button id="joinGameBtn" disabled>Join Game</button>
+            </div>
+        </div>
+
+        <div class="game-id-container">
+            <div>Game ID: <span id="gameIdDisplay">-</span></div>
+            <button id="copyIdBtn" style="margin-top: 5px; background-color: #6c757d;">Copy Game ID</button>
         </div>
     </div>
-    
-    <div class="notification" id="notification"></div>
-    
-    <script type="module">
-        // Import Firebase modules
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-app.js";
-        import { getDatabase, ref, set, onValue, remove, update, push, onDisconnect } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-database.js";
-        import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-analytics.js";
 
-        // Firebase configuration
+    <script type="module">
+        // Import Firebase modules from the provided configuration
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-app.js";
+        import { getDatabase, ref, set, onValue, update, get, push } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-database.js";
+
+        // Your Firebase configuration from the user's provided code
         const firebaseConfig = {
             apiKey: "AIzaSyAqbA4PN7uJr_lnIRHeqvvLJQXOHHoZW4E",
             authDomain: "test-8a5cb.firebaseapp.com",
@@ -302,138 +207,333 @@
 
         // Initialize Firebase
         const app = initializeApp(firebaseConfig);
-        const analytics = getAnalytics(app);
-        const db = getDatabase();
+        const database = getDatabase(app);
 
-        // Game variables
-        const BOARD_SIZE = 15;
-        let currentRoom = null;
+        // Game constants
+        const BOARD_SIZE = 15; // 15x15 standard Gomoku board
+        const EMPTY = 0;
+        const BLACK = 1;
+        const WHITE = 2;
+
+        // Game state
+        let gameId = null;
         let playerId = null;
         let playerColor = null;
-        let gameBoard = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(null));
-        let currentTurn = 'black';
-        let gameActive = false;
+        let currentGameRef = null;
+        let gameBoard = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(EMPTY));
+        let currentTurn = BLACK; // Black goes first
+        let gameStatus = 'waiting';
 
-        // DOM elements
+        // DOM Elements
         const boardElement = document.getElementById('board');
-        const gridLinesElement = document.getElementById('gridLines');
-        const roomIdInput = document.getElementById('roomId');
-        const createRoomBtn = document.getElementById('createRoom');
-        const joinRoomBtn = document.getElementById('joinRoom');
-        const leaveRoomBtn = document.getElementById('leaveRoom');
-        const gameStatusElement = document.getElementById('gameStatus');
-        const playerBlackElement = document.getElementById('playerBlack');
-        const playerWhiteElement = document.getElementById('playerWhite');
-        const notificationElement = document.getElementById('notification');
+        const gridElement = document.getElementById('grid');
+        const statusMessage = document.getElementById('statusMessage');
+        const playerInfo = document.getElementById('playerInfo');
+        const turnInfo = document.getElementById('turnInfo');
+        const newGameBtn = document.getElementById('newGameBtn');
+        const joinGameBtn = document.getElementById('joinGameBtn');
+        const joinGameId = document.getElementById('joinGameId');
+        const gameIdDisplay = document.getElementById('gameIdDisplay');
+        const copyIdBtn = document.getElementById('copyIdBtn');
 
-        // Generate a unique player ID
-        playerId = 'player_' + Math.random().toString(36).substr(2, 9);
-
-        // Initialize the board
-        function initBoard() {
-            // Clear existing board
-            boardElement.innerHTML = '';
-            
-            // Create cells
-            for (let i = 0; i < BOARD_SIZE; i++) {
-                for (let j = 0; j < BOARD_SIZE; j++) {
-                    const cell = document.createElement('div');
-                    cell.className = 'cell';
-                    cell.dataset.row = i;
-                    cell.dataset.col = j;
-                    cell.addEventListener('click', () => handleCellClick(i, j));
-                    boardElement.appendChild(cell);
-                }
-            }
-            
-            // Draw grid lines
-            drawGridLines();
+        // Initialize the game
+        function initGame() {
+            drawBoard();
+            setupEventListeners();
+            enableControls();
+            updateStatus('Connected. Create a new game or join an existing one.');
         }
 
-        // Draw grid lines
-        function drawGridLines() {
-            let svgContent = '';
+        // Draw the game board
+        function drawBoard() {
+            // Clear existing grid
+            gridElement.innerHTML = '';
             
-            // Draw horizontal lines
+            // Calculate spacing between grid lines
+            const cellSize = 100 / (BOARD_SIZE - 1);
+            
+            // Create horizontal grid lines
             for (let i = 0; i < BOARD_SIZE; i++) {
-                const percent = (i / (BOARD_SIZE - 1)) * 100;
-                svgContent += `<line x1="0%" y1="${percent}%" x2="100%" y2="${percent}%" stroke="black" stroke-width="1" />`;
+                const line = document.createElement('div');
+                line.classList.add('grid-line', 'horizontal');
+                line.style.top = `${i * cellSize}%`;
+                gridElement.appendChild(line);
             }
             
-            // Draw vertical lines
+            // Create vertical grid lines
             for (let i = 0; i < BOARD_SIZE; i++) {
-                const percent = (i / (BOARD_SIZE - 1)) * 100;
-                svgContent += `<line x1="${percent}%" y1="0%" x2="${percent}%" y2="100%" stroke="black" stroke-width="1" />`;
+                const line = document.createElement('div');
+                line.classList.add('grid-line', 'vertical');
+                line.style.left = `${i * cellSize}%`;
+                gridElement.appendChild(line);
             }
-            
-            // Add dots at specific intersections
-            const dots = [3, 7, 11];
-            for (let i of dots) {
-                for (let j of dots) {
-                    const x = (i / (BOARD_SIZE - 1)) * 100;
-                    const y = (j / (BOARD_SIZE - 1)) * 100;
-                    svgContent += `<circle cx="${x}%" cy="${y}%" r="1.5%" fill="black" />`;
-                }
-            }
-            
-            gridLinesElement.innerHTML = svgContent;
         }
 
-        // Update board based on game state
-        function updateBoard(boardData) {
+        // Setup event listeners
+        function setupEventListeners() {
+            // Board click/touch event
+            boardElement.addEventListener('click', handleBoardClick);
+            
+            // Button event listeners
+            newGameBtn.addEventListener('click', createNewGame);
+            joinGameBtn.addEventListener('click', joinGame);
+            copyIdBtn.addEventListener('click', copyGameId);
+        }
+
+        // Enable control buttons
+        function enableControls() {
+            newGameBtn.disabled = false;
+            joinGameBtn.disabled = false;
+        }
+
+        // Create a new game
+        async function createNewGame() {
+            // Create a new unique key for the game
+            const newGameRef = push(ref(database, 'games'));
+            gameId = newGameRef.key;
+            
+            // Initialize player data
+            playerId = 1;
+            playerColor = BLACK;
+            
+            // Set up initial game state in Firebase
+            await set(newGameRef, {
+                board: generateEmptyBoard(),
+                currentTurn: BLACK,
+                player1: generatePlayerId(),
+                player2: null,
+                status: 'waiting',
+                winner: null,
+                lastUpdate: Date.now()
+            });
+            
+            // Set up game listeners
+            setupGameListeners(gameId);
+            
+            // Update UI
+            gameIdDisplay.textContent = gameId;
+            updateStatus('Waiting for another player to join...');
+            playerInfo.textContent = `Player 1 (Black)`;
+            turnInfo.textContent = `Waiting...`;
+        }
+
+        // Join an existing game
+        async function joinGame() {
+            const gameIdToJoin = joinGameId.value.trim();
+            
+            if (!gameIdToJoin) {
+                updateStatus('Please enter a valid Game ID');
+                return;
+            }
+            
+            // Reference to the game
+            const gameRefToJoin = ref(database, `games/${gameIdToJoin}`);
+            
+            try {
+                // Check if game exists
+                const snapshot = await get(gameRefToJoin);
+                
+                if (!snapshot.exists()) {
+                    updateStatus('Game not found');
+                    return;
+                }
+                
+                const gameData = snapshot.val();
+                
+                // Check if game is already full
+                if (gameData.player2 !== null) {
+                    updateStatus('Game is already full');
+                    return;
+                }
+                
+                // Join as player 2
+                gameId = gameIdToJoin;
+                playerId = 2;
+                playerColor = WHITE;
+                
+                // Update game data in Firebase
+                await update(gameRefToJoin, {
+                    player2: generatePlayerId(),
+                    status: 'active',
+                    lastUpdate: Date.now()
+                });
+                
+                // Set up game listeners
+                setupGameListeners(gameId);
+                
+                // Update UI
+                gameIdDisplay.textContent = gameId;
+                playerInfo.textContent = `Player 2 (White)`;
+            } catch (error) {
+                console.error("Error joining game:", error);
+                updateStatus('Error joining game. Please try again.');
+            }
+        }
+
+        // Set up real-time listeners for game changes
+        function setupGameListeners(gameId) {
+            currentGameRef = ref(database, `games/${gameId}`);
+            
+            // Listen for changes to the game state
+            onValue(currentGameRef, (snapshot) => {
+                if (!snapshot.exists()) {
+                    updateStatus('Game no longer exists');
+                    return;
+                }
+                
+                const gameData = snapshot.val();
+                
+                // Update local game state
+                currentTurn = gameData.currentTurn;
+                gameStatus = gameData.status;
+                
+                // Update the board
+                updateBoardFromFirebase(gameData.board);
+                
+                // Update game status
+                updateGameStatus(gameData);
+            });
+        }
+
+        // Update the board display based on Firebase data
+        function updateBoardFromFirebase(boardData) {
             // Clear existing stones
             const stones = document.querySelectorAll('.stone');
             stones.forEach(stone => stone.remove());
             
-            // Render stones based on current board data
-            for (let i = 0; i < BOARD_SIZE; i++) {
-                for (let j = 0; j < BOARD_SIZE; j++) {
-                    if (boardData[i][j]) {
-                        const cell = document.querySelector(`.cell[data-row="${i}"][data-col="${j}"]`);
+            // Update local board state
+            gameBoard = boardData;
+            
+            // Calculate cell size
+            const cellSize = 100 / (BOARD_SIZE - 1);
+            
+            // Render stones
+            for (let row = 0; row < BOARD_SIZE; row++) {
+                for (let col = 0; col < BOARD_SIZE; col++) {
+                    const cell = boardData[row][col];
+                    
+                    if (cell !== EMPTY) {
                         const stone = document.createElement('div');
-                        stone.className = `stone ${boardData[i][j]}`;
-                        cell.appendChild(stone);
+                        stone.classList.add('stone');
+                        stone.classList.add(cell === BLACK ? 'black-stone' : 'white-stone');
+                        
+                        // Calculate position percentage
+                        const posX = col * cellSize;
+                        const posY = row * cellSize;
+                        
+                        // Size is proportional to cell size but slightly smaller
+                        const stoneSize = cellSize * 0.8;
+                        
+                        stone.style.left = `${posX}%`;
+                        stone.style.top = `${posY}%`;
+                        stone.style.width = `${stoneSize}%`;
+                        stone.style.height = `${stoneSize}%`;
+                        
+                        gridElement.appendChild(stone);
                     }
                 }
             }
+        }
+
+        // Update game status display
+        function updateGameStatus(gameData) {
+            // Update turn info
+            if (gameData.status === 'waiting') {
+                turnInfo.textContent = 'Waiting for player...';
+            } else if (gameData.status === 'active') {
+                turnInfo.textContent = gameData.currentTurn === BLACK ? 'Black' : 'White';
+            }
             
-            // Update game status
-            if (gameActive) {
-                gameStatusElement.textContent = `当前回合: ${currentTurn === 'black' ? '黑方' : '白方'}`;
-                if (currentTurn === playerColor) {
-                    gameStatusElement.textContent += ' (你的回合)';
-                    gameStatusElement.classList.add('active');
+            // Update game status message
+            if (gameData.status === 'waiting') {
+                updateStatus('Waiting for another player to join...');
+            } else if (gameData.status === 'active') {
+                if (gameData.currentTurn === playerColor) {
+                    updateStatus('Your turn!');
                 } else {
-                    gameStatusElement.classList.remove('active');
+                    updateStatus('Opponent\'s turn');
+                }
+            } else if (gameData.status === 'finished') {
+                if (gameData.winner === null) {
+                    updateStatus('Game ended in a draw');
+                } else if (gameData.winner === playerColor) {
+                    updateStatus('You won!');
+                } else {
+                    updateStatus('You lost');
                 }
             }
         }
 
-        // Handle cell click
-        function handleCellClick(row, col) {
-            // Check if the game is active and it's the player's turn
-            if (!gameActive || currentTurn !== playerColor || gameBoard[row][col]) {
+        // Handle board click events
+        function handleBoardClick(event) {
+            // Only proceed if it's an active game and player's turn
+            if (gameStatus !== 'active' || currentTurn !== playerColor) {
                 return;
             }
             
-            // Update local game board
-            gameBoard[row][col] = playerColor;
+            const rect = boardElement.getBoundingClientRect();
+            const boardSize = Math.min(rect.width, rect.height);
+            const boardX = event.clientX - rect.left;
+            const boardY = event.clientY - rect.top;
             
-            // Update Firebase
-            const gameBoardRef = ref(db, `rooms/${currentRoom}/gameBoard`);
-            set(gameBoardRef, gameBoard);
+            // Convert to percentage
+            const pctX = boardX / boardSize * 100;
+            const pctY = boardY / boardSize * 100;
             
-            // Switch turns
-            currentTurn = playerColor === 'black' ? 'white' : 'black';
-            const turnRef = ref(db, `rooms/${currentRoom}/currentTurn`);
-            set(turnRef, currentTurn);
+            // Adjust for grid margin (10px on each side)
+            const adjustedPctX = (pctX - 10) / 80 * 100;
+            const adjustedPctY = (pctY - 10) / 80 * 100;
             
-            // Check for win
-            checkWin(row, col);
+            // Calculate clicked cell
+            const cellSize = 100 / (BOARD_SIZE - 1);
+            const col = Math.round(adjustedPctX / cellSize);
+            const row = Math.round(adjustedPctY / cellSize);
+            
+            // Check if valid coordinates
+            if (row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
+                makeMove(row, col);
+            }
         }
 
-        // Check for win
-        function checkWin(row, col) {
+        // Make a move on the board
+        async function makeMove(row, col) {
+            // Check if the cell is empty
+            if (gameBoard[row][col] !== EMPTY) {
+                return;
+            }
+            
+            // Update local board
+            gameBoard[row][col] = playerColor;
+            
+            // Check for win
+            const hasWon = checkWinCondition(row, col, playerColor);
+            
+            // Prepare updates for Firebase
+            const updates = {
+                board: gameBoard,
+                currentTurn: playerColor === BLACK ? WHITE : BLACK,
+                lastUpdate: Date.now()
+            };
+            
+            if (hasWon) {
+                updates.status = 'finished';
+                updates.winner = playerColor;
+            } else if (isBoardFull()) {
+                updates.status = 'finished';
+                updates.winner = null; // Draw
+            }
+            
+            // Update Firebase
+            try {
+                await update(currentGameRef, updates);
+            } catch (error) {
+                console.error("Error updating game:", error);
+                updateStatus('Error updating game');
+            }
+        }
+
+        // Check win condition (5 in a row)
+        function checkWinCondition(row, col, playerColor) {
             const directions = [
                 [0, 1],  // horizontal
                 [1, 0],  // vertical
@@ -441,53 +541,16 @@
                 [1, -1]  // diagonal down-left
             ];
             
-            const color = gameBoard[row][col];
-            
-            for (let [dx, dy] of directions) {
-                let count = 1;  // Current piece
+            for (const [dx, dy] of directions) {
+                let count = 1;  // Count the placed stone itself
                 
                 // Check in positive direction
-                for (let i = 1; i < 5; i++) {
-                    const newRow = row + i * dx;
-                    const newCol = col + i * dy;
-                    
-                    if (newRow < 0 || newRow >= BOARD_SIZE || newCol < 0 || newCol >= BOARD_SIZE || 
-                        gameBoard[newRow][newCol] !== color) {
-                        break;
-                    }
-                    count++;
-                }
+                count += countConsecutive(row, col, dx, dy, playerColor);
                 
                 // Check in negative direction
-                for (let i = 1; i < 5; i++) {
-                    const newRow = row - i * dx;
-                    const newCol = col - i * dy;
-                    
-                    if (newRow < 0 || newRow >= BOARD_SIZE || newCol < 0 || newCol >= BOARD_SIZE || 
-                        gameBoard[newRow][newCol] !== color) {
-                        break;
-                    }
-                    count++;
-                }
+                count += countConsecutive(row, col, -dx, -dy, playerColor);
                 
                 if (count >= 5) {
-                    // Player wins
-                    gameActive = false;
-                    const statusRef = ref(db, `rooms/${currentRoom}/status`);
-                    set(statusRef, 'ended');
-                    
-                    const winnerRef = ref(db, `rooms/${currentRoom}/winner`);
-                    set(winnerRef, color);
-                    
-                    gameStatusElement.textContent = `游戏结束! ${color === 'black' ? '黑方' : '白方'}胜利!`;
-                    gameStatusElement.classList.remove('active');
-                    
-                    if (color === playerColor) {
-                        showNotification('恭喜你赢了!', 'success');
-                    } else {
-                        showNotification('很遗憾，你输了!', 'error');
-                    }
-                    
                     return true;
                 }
             }
@@ -495,199 +558,70 @@
             return false;
         }
 
-        // Create room
-        createRoomBtn.addEventListener('click', () => {
-            const roomId = roomIdInput.value.trim() || Math.random().toString(36).substr(2, 6);
-            currentRoom = roomId;
+        // Count consecutive stones in a direction
+        function countConsecutive(row, col, dx, dy, playerColor) {
+            let count = 0;
+            let r = row + dx;
+            let c = col + dy;
             
-            // First player is black
-            playerColor = 'black';
-            
-            // Initialize room in Firebase
-            const roomRef = ref(db, `rooms/${roomId}`);
-            set(roomRef, {
-                players: {
-                    black: {
-                        id: playerId,
-                        name: 'Player 1'
-                    }
-                },
-                gameBoard: gameBoard,
-                currentTurn: 'black',
-                status: 'waiting'
-            });
-            
-            // Set up disconnect cleanup
-            const playerRef = ref(db, `rooms/${roomId}/players/black`);
-            onDisconnect(playerRef).remove();
-            
-            // Start listening for changes
-            startGame(roomId);
-            
-            showNotification(`房间创建成功: ${roomId}`);
-            roomIdInput.value = roomId;
-        });
-
-        // Join room
-        joinRoomBtn.addEventListener('click', () => {
-            const roomId = roomIdInput.value.trim();
-            if (!roomId) {
-                showNotification('请输入房间ID', 'error');
-                return;
+            while (
+                r >= 0 && r < BOARD_SIZE &&
+                c >= 0 && c < BOARD_SIZE &&
+                gameBoard[r][c] === playerColor
+            ) {
+                count++;
+                r += dx;
+                c += dy;
             }
             
-            const roomRef = ref(db, `rooms/${roomId}`);
-            onValue(roomRef, (snapshot) => {
-                const roomData = snapshot.val();
-                if (!roomData) {
-                    showNotification('房间不存在', 'error');
-                    return;
-                }
-                
-                if (roomData.players && roomData.players.black && roomData.players.white) {
-                    showNotification('房间已满', 'error');
-                    return;
-                }
-                
-                // Second player is white
-                playerColor = 'white';
-                currentRoom = roomId;
-                
-                // Add the player to the room
-                const playerRef = ref(db, `rooms/${roomId}/players/white`);
-                set(playerRef, {
-                    id: playerId,
-                    name: 'Player 2'
-                });
-                
-                // Set room status to active
-                const statusRef = ref(db, `rooms/${roomId}/status`);
-                set(statusRef, 'active');
-                
-                // Set up disconnect cleanup
-                onDisconnect(playerRef).remove();
-                
-                // Start listening for changes
-                startGame(roomId);
-                
-                showNotification(`成功加入房间: ${roomId}`);
-            }, {
-                onlyOnce: true
-            });
-        });
+            return count;
+        }
 
-        // Leave room
-        leaveRoomBtn.addEventListener('click', () => {
-            if (currentRoom) {
-                // Remove player from room
-                const playerRef = ref(db, `rooms/${currentRoom}/players/${playerColor}`);
-                remove(playerRef);
-                
-                // Reset game state
-                resetGame();
-                
-                showNotification('已离开房间');
+        // Check if the board is full (draw)
+        function isBoardFull() {
+            for (let row = 0; row < BOARD_SIZE; row++) {
+                for (let col = 0; col < BOARD_SIZE; col++) {
+                    if (gameBoard[row][col] === EMPTY) {
+                        return false;
+                    }
+                }
             }
-        });
-
-        // Start game
-        function startGame(roomId) {
-            currentRoom = roomId;
-            
-            // Clear the board
-            gameBoard = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(null));
-            initBoard();
-            
-            // Listen for room changes
-            const roomRef = ref(db, `rooms/${roomId}`);
-            onValue(roomRef, (snapshot) => {
-                const roomData = snapshot.val();
-                if (!roomData) {
-                    showNotification('房间已被删除', 'error');
-                    resetGame();
-                    return;
-                }
-                
-                // Update player info
-                if (roomData.players) {
-                    if (roomData.players.black) {
-                        playerBlackElement.textContent = roomData.players.black.name;
-                    } else {
-                        playerBlackElement.textContent = '等待加入...';
-                    }
-                    
-                    if (roomData.players.white) {
-                        playerWhiteElement.textContent = roomData.players.white.name;
-                    } else {
-                        playerWhiteElement.textContent = '等待加入...';
-                    }
-                }
-                
-                // Update game status
-                if (roomData.status === 'active') {
-                    gameActive = true;
-                    gameStatusElement.textContent = `当前回合: ${roomData.currentTurn === 'black' ? '黑方' : '白方'}`;
-                    
-                    if (roomData.currentTurn === playerColor) {
-                        gameStatusElement.textContent += ' (你的回合)';
-                        gameStatusElement.classList.add('active');
-                    } else {
-                        gameStatusElement.classList.remove('active');
-                    }
-                } else if (roomData.status === 'ended') {
-                    gameActive = false;
-                    if (roomData.winner) {
-                        gameStatusElement.textContent = `游戏结束! ${roomData.winner === 'black' ? '黑方' : '白方'}胜利!`;
-                    } else {
-                        gameStatusElement.textContent = '游戏结束!';
-                    }
-                    gameStatusElement.classList.remove('active');
-                } else {
-                    gameActive = false;
-                    gameStatusElement.textContent = '等待对手加入...';
-                    gameStatusElement.classList.remove('active');
-                }
-                
-                // Update current turn
-                currentTurn = roomData.currentTurn;
-                
-                // Update game board
-                if (roomData.gameBoard) {
-                    gameBoard = roomData.gameBoard;
-                    updateBoard(gameBoard);
-                }
-            });
+            return true;
         }
 
-        // Reset game
-        function resetGame() {
-            currentRoom = null;
-            playerColor = null;
-            gameBoard = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(null));
-            currentTurn = 'black';
-            gameActive = false;
-            
-            // Reset UI
-            playerBlackElement.textContent = '等待加入...';
-            playerWhiteElement.textContent = '等待加入...';
-            gameStatusElement.textContent = '请创建或加入房间';
-            gameStatusElement.classList.remove('active');
-            
-            initBoard();
+        // Generate an empty board data structure
+        function generateEmptyBoard() {
+            return Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(EMPTY));
         }
 
-        // Show notification
-        function showNotification(message, type = 'success') {
-            notificationElement.textContent = message;
-            notificationElement.className = `notification show ${type}`;
-            
-            setTimeout(() => {
-                notificationElement.className = 'notification';
-            }, 3000);
+        // Generate a random player ID
+        function generatePlayerId() {
+            return Math.random().toString(36).substring(2, 10);
         }
 
-        // Initialize the game
-        initBoard();
+        // Copy game ID to clipboard
+        function copyGameId() {
+            if (gameId) {
+                navigator.clipboard.writeText(gameId)
+                    .then(() => {
+                        copyIdBtn.textContent = 'Copied!';
+                        setTimeout(() => {
+                            copyIdBtn.textContent = 'Copy Game ID';
+                        }, 2000);
+                    })
+                    .catch(err => {
+                        console.error('Failed to copy: ', err);
+                    });
+            }
+        }
+
+        // Update status message
+        function updateStatus(message) {
+            statusMessage.innerHTML = message;
+        }
+
+        // Initialize game when Firebase is ready
+        initGame();
     </script>
 </body>
 </html>
