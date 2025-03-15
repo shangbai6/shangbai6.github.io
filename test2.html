@@ -380,81 +380,60 @@
         }
 
         // Update board based on game state
-        function updateBoard() {
+        function updateBoard(boardData) {
+            // Clear existing stones
+            const stones = document.querySelectorAll('.stone');
+            stones.forEach(stone => stone.remove());
+            
+            // Render stones based on current board data
             for (let i = 0; i < BOARD_SIZE; i++) {
                 for (let j = 0; j < BOARD_SIZE; j++) {
-                    const cell = boardElement.querySelector(`[data-row="${i}"][data-col="${j}"]`);
-                    
-                    // Clear any existing stones
-                    const existingStone = cell.querySelector('.stone');
-                    if (existingStone) {
-                        cell.removeChild(existingStone);
-                    }
-                    
-                    // Add stone if necessary
-                    if (gameBoard[i][j]) {
+                    if (boardData[i][j]) {
+                        const cell = document.querySelector(`.cell[data-row="${i}"][data-col="${j}"]`);
                         const stone = document.createElement('div');
-                        stone.className = `stone ${gameBoard[i][j]}`;
+                        stone.className = `stone ${boardData[i][j]}`;
                         cell.appendChild(stone);
                     }
+                }
+            }
+            
+            // Update game status
+            if (gameActive) {
+                gameStatusElement.textContent = `当前回合: ${currentTurn === 'black' ? '黑方' : '白方'}`;
+                if (currentTurn === playerColor) {
+                    gameStatusElement.textContent += ' (你的回合)';
+                    gameStatusElement.classList.add('active');
+                } else {
+                    gameStatusElement.classList.remove('active');
                 }
             }
         }
 
         // Handle cell click
         function handleCellClick(row, col) {
-            if (!gameActive) {
-                showNotification('游戏尚未开始！');
+            // Check if the game is active and it's the player's turn
+            if (!gameActive || currentTurn !== playerColor || gameBoard[row][col]) {
                 return;
             }
             
-            if (playerColor !== currentTurn) {
-                showNotification('不是你的回合！');
-                return;
-            }
+            // Update local game board
+            gameBoard[row][col] = playerColor;
             
-            if (gameBoard[row][col]) {
-                showNotification('此位置已有棋子！');
-                return;
-            }
+            // Update Firebase
+            const gameBoardRef = ref(db, `rooms/${currentRoom}/gameBoard`);
+            set(gameBoardRef, gameBoard);
             
-            // Make move in the database
-            makeMove(row, col);
+            // Switch turns
+            currentTurn = playerColor === 'black' ? 'white' : 'black';
+            const turnRef = ref(db, `rooms/${currentRoom}/currentTurn`);
+            set(turnRef, currentTurn);
+            
+            // Check for win
+            checkWin(row, col);
         }
 
-        // Make a move
-        function makeMove(row, col) {
-            const gameRef = ref(db, `games/${currentRoom}`);
-            
-            update(gameRef, {
-                lastMove: {
-                    row: row,
-                    col: col,
-                    color: currentTurn,
-                    timestamp: Date.now()
-                },
-                currentTurn: currentTurn === 'black' ? 'white' : 'black'
-            }).then(() => {
-                // Update local board immediately for responsiveness
-                gameBoard[row][col] = currentTurn;
-                updateBoard();
-                
-                // Check for win
-                if (checkWin(row, col, currentTurn)) {
-                    const winnerColor = currentTurn;
-                    update(gameRef, {
-                        winner: winnerColor,
-                        gameActive: false
-                    });
-                }
-            }).catch(error => {
-                console.error("Error making move:", error);
-                showNotification('落子失败，请重试！');
-            });
-        }
-
-        // Check for win (5 in a row)
-        function checkWin(row, col, color) {
+        // Check for win
+        function checkWin(row, col) {
             const directions = [
                 [0, 1],  // horizontal
                 [1, 0],  // vertical
@@ -462,32 +441,53 @@
                 [1, -1]  // diagonal down-left
             ];
             
-            for (const [dx, dy] of directions) {
-                let count = 1; // Count the stone just placed
+            const color = gameBoard[row][col];
+            
+            for (let [dx, dy] of directions) {
+                let count = 1;  // Current piece
                 
                 // Check in positive direction
                 for (let i = 1; i < 5; i++) {
-                    const r = row + i * dx;
-                    const c = col + i * dy;
-                    if (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE && gameBoard[r][c] === color) {
-                        count++;
-                    } else {
+                    const newRow = row + i * dx;
+                    const newCol = col + i * dy;
+                    
+                    if (newRow < 0 || newRow >= BOARD_SIZE || newCol < 0 || newCol >= BOARD_SIZE || 
+                        gameBoard[newRow][newCol] !== color) {
                         break;
                     }
+                    count++;
                 }
                 
                 // Check in negative direction
                 for (let i = 1; i < 5; i++) {
-                    const r = row - i * dx;
-                    const c = col - i * dy;
-                    if (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE && gameBoard[r][c] === color) {
-                        count++;
-                    } else {
+                    const newRow = row - i * dx;
+                    const newCol = col - i * dy;
+                    
+                    if (newRow < 0 || newRow >= BOARD_SIZE || newCol < 0 || newCol >= BOARD_SIZE || 
+                        gameBoard[newRow][newCol] !== color) {
                         break;
                     }
+                    count++;
                 }
                 
                 if (count >= 5) {
+                    // Player wins
+                    gameActive = false;
+                    const statusRef = ref(db, `rooms/${currentRoom}/status`);
+                    set(statusRef, 'ended');
+                    
+                    const winnerRef = ref(db, `rooms/${currentRoom}/winner`);
+                    set(winnerRef, color);
+                    
+                    gameStatusElement.textContent = `游戏结束! ${color === 'black' ? '黑方' : '白方'}胜利!`;
+                    gameStatusElement.classList.remove('active');
+                    
+                    if (color === playerColor) {
+                        showNotification('恭喜你赢了!', 'success');
+                    } else {
+                        showNotification('很遗憾，你输了!', 'error');
+                    }
+                    
                     return true;
                 }
             }
@@ -495,218 +495,194 @@
             return false;
         }
 
-        // Create a new room
+        // Create room
         createRoomBtn.addEventListener('click', () => {
-            const roomId = roomIdInput.value.trim() || generateRoomId();
+            const roomId = roomIdInput.value.trim() || Math.random().toString(36).substr(2, 6);
+            currentRoom = roomId;
+            
+            // First player is black
+            playerColor = 'black';
+            
+            // Initialize room in Firebase
+            const roomRef = ref(db, `rooms/${roomId}`);
+            set(roomRef, {
+                players: {
+                    black: {
+                        id: playerId,
+                        name: 'Player 1'
+                    }
+                },
+                gameBoard: gameBoard,
+                currentTurn: 'black',
+                status: 'waiting'
+            });
+            
+            // Set up disconnect cleanup
+            const playerRef = ref(db, `rooms/${roomId}/players/black`);
+            onDisconnect(playerRef).remove();
+            
+            // Start listening for changes
+            startGame(roomId);
+            
+            showNotification(`房间创建成功: ${roomId}`);
             roomIdInput.value = roomId;
-            
-            const roomRef = ref(db, `games/${roomId}`);
-            
-            // Check if room exists
-            onValue(roomRef, (snapshot) => {
-                if (snapshot.exists()) {
-                    showNotification('房间已存在，请尝试其他ID！');
-                } else {
-                    // Create new room
-                    set(roomRef, {
-                        id: roomId,
-                        createdAt: Date.now(),
-                        gameActive: false,
-                        currentTurn: 'black',
-                        board: Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(null)),
-                        players: {
-                            black: {
-                                id: playerId,
-                                joinedAt: Date.now()
-                            }
-                        }
-                    }).then(() => {
-                        currentRoom = roomId;
-                        playerColor = 'black';
-                        gameBoard = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(null));
-                        
-                        // Setup disconnect handler
-                        const playerRef = ref(db, `games/${roomId}/players/black`);
-                        onDisconnect(playerRef).remove();
-                        
-                        showNotification('房间创建成功！你是黑方。');
-                        startGameListener(roomId);
-                    }).catch(error => {
-                        console.error("Error creating room:", error);
-                        showNotification('创建房间失败，请重试！');
-                    });
-                }
-            }, { onlyOnce: true });
         });
 
-        // Join an existing room
+        // Join room
         joinRoomBtn.addEventListener('click', () => {
             const roomId = roomIdInput.value.trim();
-            
             if (!roomId) {
-                showNotification('请输入房间ID！');
+                showNotification('请输入房间ID', 'error');
                 return;
             }
             
-            const roomRef = ref(db, `games/${roomId}`);
-            
-            // Check if room exists
+            const roomRef = ref(db, `rooms/${roomId}`);
             onValue(roomRef, (snapshot) => {
-                if (!snapshot.exists()) {
-                    showNotification('房间不存在！');
-                    return;
-                }
-                
                 const roomData = snapshot.val();
-                
-                // Can't join if game is full
-                if (roomData.players.black && roomData.players.white) {
-                    showNotification('房间已满！');
+                if (!roomData) {
+                    showNotification('房间不存在', 'error');
                     return;
                 }
                 
-                // Determine player color
-                const color = roomData.players.black ? 'white' : 'black';
+                if (roomData.players && roomData.players.black && roomData.players.white) {
+                    showNotification('房间已满', 'error');
+                    return;
+                }
                 
-                // Join the room
-                update(ref(db, `games/${roomId}/players`), {
-                    [color]: {
-                        id: playerId,
-                        joinedAt: Date.now()
-                    }
-                }).then(() => {
-                    // If both players have joined, start the game
-                    if (color === 'white' || (roomData.players.white && color === 'black')) {
-                        update(roomRef, {
-                            gameActive: true
-                        });
-                    }
-                    
-                    currentRoom = roomId;
-                    playerColor = color;
-                    
-                    // Setup disconnect handler
-                    const playerRef = ref(db, `games/${roomId}/players/${color}`);
-                    onDisconnect(playerRef).remove();
-                    
-                    showNotification(`成功加入房间！你是${color === 'black' ? '黑' : '白'}方。`);
-                    startGameListener(roomId);
-                }).catch(error => {
-                    console.error("Error joining room:", error);
-                    showNotification('加入房间失败，请重试！');
+                // Second player is white
+                playerColor = 'white';
+                currentRoom = roomId;
+                
+                // Add the player to the room
+                const playerRef = ref(db, `rooms/${roomId}/players/white`);
+                set(playerRef, {
+                    id: playerId,
+                    name: 'Player 2'
                 });
-            }, { onlyOnce: true });
+                
+                // Set room status to active
+                const statusRef = ref(db, `rooms/${roomId}/status`);
+                set(statusRef, 'active');
+                
+                // Set up disconnect cleanup
+                onDisconnect(playerRef).remove();
+                
+                // Start listening for changes
+                startGame(roomId);
+                
+                showNotification(`成功加入房间: ${roomId}`);
+            }, {
+                onlyOnce: true
+            });
         });
 
-        // Leave the current room
+        // Leave room
         leaveRoomBtn.addEventListener('click', () => {
-            if (!currentRoom) {
-                showNotification('你没有在任何房间内！');
-                return;
-            }
-            
-            // Remove player from the room
-            if (playerColor) {
-                remove(ref(db, `games/${currentRoom}/players/${playerColor}`))
-                    .then(() => {
-                        showNotification('已离开房间！');
-                        resetGameState();
-                    })
-                    .catch(error => {
-                        console.error("Error leaving room:", error);
-                        showNotification('离开房间失败，请重试！');
-                    });
+            if (currentRoom) {
+                // Remove player from room
+                const playerRef = ref(db, `rooms/${currentRoom}/players/${playerColor}`);
+                remove(playerRef);
+                
+                // Reset game state
+                resetGame();
+                
+                showNotification('已离开房间');
             }
         });
 
-        // Start listening for game updates
-        function startGameListener(roomId) {
-            const gameRef = ref(db, `games/${roomId}`);
+        // Start game
+        function startGame(roomId) {
+            currentRoom = roomId;
             
-            onValue(gameRef, (snapshot) => {
-                if (!snapshot.exists()) {
-                    showNotification('房间已不存在！');
-                    resetGameState();
+            // Clear the board
+            gameBoard = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(null));
+            initBoard();
+            
+            // Listen for room changes
+            const roomRef = ref(db, `rooms/${roomId}`);
+            onValue(roomRef, (snapshot) => {
+                const roomData = snapshot.val();
+                if (!roomData) {
+                    showNotification('房间已被删除', 'error');
+                    resetGame();
                     return;
                 }
-                
-                const gameData = snapshot.val();
-                
-                // Update game state
-                gameActive = gameData.gameActive;
-                currentTurn = gameData.currentTurn;
                 
                 // Update player info
-                if (gameData.players.black) {
-                    playerBlackElement.textContent = gameData.players.black.id === playerId ? '你' : '对手';
-                } else {
-                    playerBlackElement.textContent = '等待加入...';
+                if (roomData.players) {
+                    if (roomData.players.black) {
+                        playerBlackElement.textContent = roomData.players.black.name;
+                    } else {
+                        playerBlackElement.textContent = '等待加入...';
+                    }
+                    
+                    if (roomData.players.white) {
+                        playerWhiteElement.textContent = roomData.players.white.name;
+                    } else {
+                        playerWhiteElement.textContent = '等待加入...';
+                    }
                 }
                 
-                if (gameData.players.white) {
-                    playerWhiteElement.textContent = gameData.players.white.id === playerId ? '你' : '对手';
+                // Update game status
+                if (roomData.status === 'active') {
+                    gameActive = true;
+                    gameStatusElement.textContent = `当前回合: ${roomData.currentTurn === 'black' ? '黑方' : '白方'}`;
+                    
+                    if (roomData.currentTurn === playerColor) {
+                        gameStatusElement.textContent += ' (你的回合)';
+                        gameStatusElement.classList.add('active');
+                    } else {
+                        gameStatusElement.classList.remove('active');
+                    }
+                } else if (roomData.status === 'ended') {
+                    gameActive = false;
+                    if (roomData.winner) {
+                        gameStatusElement.textContent = `游戏结束! ${roomData.winner === 'black' ? '黑方' : '白方'}胜利!`;
+                    } else {
+                        gameStatusElement.textContent = '游戏结束!';
+                    }
+                    gameStatusElement.classList.remove('active');
                 } else {
-                    playerWhiteElement.textContent = '等待加入...';
-                }
-                
-                // Update status
-                if (gameData.winner) {
-                    const winnerText = gameData.winner === 'black' ? '黑方' : '白方';
-                    gameStatusElement.textContent = `游戏结束！${winnerText}获胜！`;
-                    gameStatusElement.className = 'status';
-                } else if (!gameData.gameActive) {
+                    gameActive = false;
                     gameStatusElement.textContent = '等待对手加入...';
-                    gameStatusElement.className = 'status';
-                } else {
-                    const turnText = gameData.currentTurn === 'black' ? '黑方' : '白方';
-                    gameStatusElement.textContent = `轮到${turnText}`;
-                    gameStatusElement.className = 'status active';
+                    gameStatusElement.classList.remove('active');
                 }
                 
-                // Update board state if there's a last move
-                if (gameData.lastMove) {
-                    const { row, col, color } = gameData.lastMove;
-                    gameBoard[row][col] = color;
-                }
+                // Update current turn
+                currentTurn = roomData.currentTurn;
                 
-                // If the server has the full board state, use it
-                if (gameData.board) {
-                    gameBoard = gameData.board;
+                // Update game board
+                if (roomData.gameBoard) {
+                    gameBoard = roomData.gameBoard;
+                    updateBoard(gameBoard);
                 }
-                
-                // Update the visual board
-                updateBoard();
             });
         }
 
-        // Generate a random room ID
-        function generateRoomId() {
-            return Math.random().toString(36).substr(2, 6);
-        }
-
-        // Reset game state when leaving a room
-        function resetGameState() {
+        // Reset game
+        function resetGame() {
             currentRoom = null;
             playerColor = null;
             gameBoard = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(null));
-            gameActive = false;
             currentTurn = 'black';
+            gameActive = false;
             
+            // Reset UI
             playerBlackElement.textContent = '等待加入...';
             playerWhiteElement.textContent = '等待加入...';
             gameStatusElement.textContent = '请创建或加入房间';
-            gameStatusElement.className = 'status';
+            gameStatusElement.classList.remove('active');
             
-            updateBoard();
+            initBoard();
         }
 
         // Show notification
-        function showNotification(message) {
+        function showNotification(message, type = 'success') {
             notificationElement.textContent = message;
-            notificationElement.classList.add('show');
+            notificationElement.className = `notification show ${type}`;
             
             setTimeout(() => {
-                notificationElement.classList.remove('show');
+                notificationElement.className = 'notification';
             }, 3000);
         }
 
