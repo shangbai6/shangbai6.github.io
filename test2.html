@@ -314,7 +314,7 @@
             gameIdDisplay.textContent = gameId;
             updateStatus('Waiting for another player to join...');
             playerInfo.textContent = `Player 1 (Black)`;
-            turnInfo.textContent = `Waiting...`;
+        ;
         }
 
         // Join an existing game
@@ -439,7 +439,7 @@
         function updateGameStatus(gameData) {
             // Update turn info
             if (gameData.status === 'waiting') {
-                turnInfo.textContent = 'Waiting for player...';
+                ;
             } else if (gameData.status === 'active') {
                 turnInfo.textContent = gameData.currentTurn === BLACK ? 'Black' : 'White';
             }
