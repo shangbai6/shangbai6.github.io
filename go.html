@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>简易围棋 AI (单一文件)</title>
+    <style>
+        /* CSS Styles */
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0e0d0; /* Light wood color */
+            padding: 20px;
+            color: #333;
+        }
+
+        h1 {
+            color: #5c4033; /* Darker wood color */
+        }
+
+        .controls {
+            margin-bottom: 20px;
+            background-color: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            gap: 15px; /* Spacing between controls */
+            flex-wrap: wrap; /* Allow wrapping on smaller screens */
+        }
+
+        .controls label {
+            font-weight: bold;
+        }
+
+        #depth-value {
+            font-weight: bold;
+            min-width: 15px; /* Ensure space for number */
+            text-align: right;
+            background-color: #eee;
+            padding: 2px 5px;
+            border-radius: 4px;
+        }
+
+        button {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 5px;
+            background-color: #8b4513; /* Saddle Brown */
+            color: white;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background-color 0.2s ease;
+        }
+
+        button:hover {
+            background-color: #a0522d; /* Peru */
+        }
+
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        #board-container {
+            position: relative;
+            width: 90vmin; /* Responsive size */
+            max-width: 450px;
+            height: 90vmin; /* Responsive size */
+            max-height: 450px;
+            background-color: #d1b78e; /* Board color */
+            padding: 5%; /* Relative padding */
+            box-sizing: border-box;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            border: 2px solid #5c4033; /* Darker wood border */
+            margin-bottom: 20px;
+        }
+
+        #go-board {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: grid;
+            /* grid-template-columns/rows set by JS */
+            background-size: calc(100% / 8) calc(100% / 8); /* 9x9 means 8x8 squares */
+            background-image:
+                linear-gradient(to right, #5c4033 1px, transparent 1px),
+                linear-gradient(to bottom, #5c4033 1px, transparent 1px);
+        }
+
+        /* Star points (Hoshi) for 9x9 */
+        .star-point::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 6px;
+            height: 6px;
+            background-color: #5c4033;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        .intersection {
+            position: relative; /* For centering the stone and star points */
+            cursor: pointer;
+            /* border: 1px dashed lightblue; /* Uncomment to debug layout */
+            display: flex; /* For centering potential content */
+            justify-content: center;
+            align-items: center;
+        }
+
+        .intersection:hover::after { /* Visual feedback for placement */
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            height: 80%;
+            border-radius: 50%;
+            background-color: rgba(0, 0, 0, 0.1);
+            pointer-events: none; /* Allow clicks to pass through */
+            z-index: 5; /* Above stones */
+        }
+
+        .stone {
+            position: absolute;
+            width: 90%; /* Slightly smaller than intersection spacing */
+            height: 90%;
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 1px 1px 4px rgba(0,0,0,0.5);
+            pointer-events: none; /* Stones shouldn't block intersection clicks */
+            z-index: 10; /* Ensure stones are above lines */
+        }
+
+        .stone.black {
+            background-color: #333;
+            background: radial-gradient(circle at 35% 35%, #666, #000);
+        }
+
+        .stone.white {
+            background-color: #eee;
+            background: radial-gradient(circle at 35% 35%, #fff, #bbb);
+        }
+
+        #message-area {
+            margin-top: 15px;
+            font-size: 1.1em;
+            font-weight: bold;
+            min-height: 1.5em; /* Prevent layout shifts */
+            color: #5c4033;
+            text-align: center;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>简易围棋 AI (9x9 - 单一文件)</h1>
+
+    <div class="controls">
+        <label for="depth-slider">AI 思考深度:</label>
+        <input type="range" id="depth-slider" min="1" max="4" value="2">
+        <span id="depth-value">2</span>
+        <button id="new-game-btn">新游戏</button>
+        <button id="pass-btn">停一手 (Pass)</button>
+        <span>玩家: 黑 <span class="stone black" style="position:relative; display:inline-block; width:1em; height:1em; top:0.1em; transform:none; left:0;"></span></span>
+        <span>AI: 白 <span class="stone white" style="position:relative; display:inline-block; width:1em; height:1em; top:0.1em; transform:none; left:0;"></span></span>
+    </div>
+
+    <div id="board-container">
+        <div id="go-board">
+            <!-- Intersections will be generated by JavaScript -->
+        </div>
+    </div>
+
+    <div id="message-area">正在初始化...</div>
+
+    <script>
+        // JavaScript Logic
+        document.addEventListener('DOMContentLoaded', () => {
+            const boardSize = 9;
+            const boardElement = document.getElementById('go-board');
+            const messageArea = document.getElementById('message-area');
+            const depthSlider = document.getElementById('depth-slider');
+            const depthValueSpan = document.getElementById('depth-value');
+            const newGameBtn = document.getElementById('new-game-btn');
+            const passBtn = document.getElementById('pass-btn');
+
+            const EMPTY = 0;
+            const BLACK = 1;
+            const WHITE = 2;
+            const PlayerName = { [BLACK]: "黑棋", [WHITE]: "白棋" };
+            const MAX_DEPTH = 4; // Hard limit for safety
+
+            let boardState = []; // 2D array [y][x]
+            let currentPlayer = BLACK;
+            let aiDepth = parseInt(depthSlider.value, 10);
+            let gameOver = false;
+            let passCounter = 0;
+            // Simple Ko rule: { x: null, y: null, turn: 0 } - prevents immediate recapture
+            let koInfo = { x: null, y: null, turn: 0 };
+            let currentTurn = 0; // Turn counter
+
+            // --- Board Setup ---
+
+            function setupBoard() {
+                boardElement.innerHTML = ''; // Clear previous board
+                boardState = Array(boardSize).fill(0).map(() => Array(boardSize).fill(EMPTY));
+                boardElement.style.gridTemplateColumns = `repeat(${boardSize}, 1fr)`;
+                boardElement.style.gridTemplateRows = `repeat(${boardSize}, 1fr)`;
+
+                // Star points for 9x9 (3-3, 3-7, 5-5, 7-3, 7-7 indices) -> (2,2), (2,6), (4,4), (6,2), (6,6)
+                const starPoints = [
+                    { x: 2, y: 2 }, { x: 6, y: 2 },
+                    { x: 4, y: 4 },
+                    { x: 2, y: 6 }, { x: 6, y: 6 }
+                ];
+
+                for (let y = 0; y < boardSize; y++) {
+                    for (let x = 0; x < boardSize; x++) {
+                        const intersection = document.createElement('div');
+                        intersection.classList.add('intersection');
+                        intersection.dataset.x = x;
+                        intersection.dataset.y = y;
+
+                        // Add star points visual marker
+                        if (starPoints.some(p => p.x === x && p.y === y)) {
+                            intersection.classList.add('star-point');
+                        }
+
+                        intersection.addEventListener('click', handleIntersectionClick);
+                        boardElement.appendChild(intersection);
+                    }
+                }
+                 // Add initial stones for testing (optional)
+                // placeStone(4, 4, BLACK, true); // Central black stone
+                // placeStone(3, 4, WHITE, true);
+                // placeStone(5, 4, BLACK, true);
+                // placeStone(4, 3, WHITE, true);
+                // placeStone(4, 5, BLACK, true); // Black in Atari
+            }
+
+            // --- Game Initialization ---
+
+            function initializeGame() {
+                setupBoard();
+                currentPlayer = BLACK;
+                gameOver = false;
+                passCounter = 0;
+                koInfo = { x: null, y: null, turn: 0 };
+                currentTurn = 1;
+                updateMessage(`第 ${currentTurn} 手, 轮到 ${PlayerName[currentPlayer]} 落子...`);
+                depthSlider.value = aiDepth; // Keep selected depth or reset? Let's keep it.
+                depthValueSpan.textContent = aiDepth;
+                enableControls(true);
+            }
+
+            // --- Event Handlers ---
+
+            depthSlider.addEventListener('input', (event) => {
+                aiDepth = parseInt(event.target.value, 10);
+                depthValueSpan.textContent = aiDepth;
+            });
+
+            newGameBtn.addEventListener('click', initializeGame);
+
+            passBtn.addEventListener('click', handlePass);
+
+            function handleIntersectionClick(event) {
+                if (gameOver || currentPlayer === WHITE) return; // Only human (BLACK) clicks
+
+                const x = parseInt(event.target.dataset.x, 10);
+                const y = parseInt(event.target.dataset.y, 10);
+
+                if (isValidMove(x, y, currentPlayer, boardState)) {
+                     const capturedStonesInfo = placeStone(x, y, currentPlayer, true); // true to update DOM
+                     resetPassCounter();
+
+                     // Simple Ko check update
+                     if (capturedStonesInfo.count === 1 && capturedStonesInfo.lastCaptureCoords) {
+                         koInfo.x = capturedStonesInfo.lastCaptureCoords.x;
+                         koInfo.y = capturedStonesInfo.lastCaptureCoords.y;
+                         koInfo.turn = currentTurn + 1; // Ko is active for the *next* turn
+                         // console.log(`Ko rule set for turn ${koInfo.turn} at (${koInfo.x}, ${koInfo.y})`);
+                     } else {
+                         koInfo = { x: null, y: null, turn: 0 }; // Reset Ko
+                     }
+
+                     switchPlayer();
+                } else {
+                    // Briefly indicate invalid move (optional)
+                    updateMessage("无效落子!");
+                    setTimeout(() => {
+                         if (!gameOver) {
+                            updateMessage(`第 ${currentTurn} 手, 轮到 ${PlayerName[currentPlayer]} 落子...`);
+                         }
+                    }, 1000);
+                }
+            }
+
+             function handlePass() {
+                if (gameOver) return;
+
+                passCounter++;
+                updateMessage(`${PlayerName[currentPlayer]} 停一手 (Pass).`);
+                koInfo = { x: null, y: null, turn: 0 }; // Passing resets Ko
+
+                if (passCounter >= 2) {
+                    endGame("双方连续停手，游戏结束！");
+                } else {
+                    // Need a small delay so the message is visible before AI potentially moves instantly
+                    setTimeout(switchPlayer, 300);
+                }
+            }
+
+
+            // --- Core Game Logic ---
+
+            function isValidCoordinate(x, y) {
+                return x >= 0 && x < boardSize && y >= 0 && y < boardSize;
+            }
+
+            // Finds connected group of stones and their liberties
+            function findGroupAndLiberties(x, y, player, currentBoard) {
+                if (!isValidCoordinate(x, y) || currentBoard[y][x] !== player) {
+                    return { group: new Set(), liberties: new Set() };
+                }
+
+                const group = new Set(); // Stores "x,y" strings
+                const liberties = new Set(); // Stores "x,y" strings
+                const queue = [[x, y]];
+                const visited = new Set(); // Stores "x,y" strings
+
+                while (queue.length > 0) {
+                    const [curX, curY] = queue.shift();
+                    const key = `${curX},${curY}`;
+
+                    if (!isValidCoordinate(curX, curY) || visited.has(key)) {
+                        continue;
+                    }
+                    visited.add(key);
+
+                    if (currentBoard[curY][curX] === player) {
+                        group.add(key);
+                        // Check neighbors
+                        [[0, 1], [0, -1], [1, 0], [-1, 0]].forEach(([dx, dy]) => {
+                            const nextX = curX + dx;
+                            const nextY = curY + dy;
+                             const neighborKey = `${nextX},${nextY}`;
+                            if (isValidCoordinate(nextX, nextY) && !visited.has(neighborKey)) {
+                                if (currentBoard[nextY][nextX] === EMPTY) {
+                                    liberties.add(neighborKey);
+                                } else if (currentBoard[nextY][nextX] === player) {
+                                    queue.push([nextX, nextY]);
+                                }
+                            }
+                        });
+                    }
+                }
+                // Convert Set<string> to Set<{x, y}> or similar if needed elsewhere, but strings are fine here
+                return { group, liberties };
+            }
+
+             // Check if placing a stone at (x, y) is a valid move
+            function isValidMove(x, y, player, currentBoard) {
+                if (!isValidCoordinate(x, y) || currentBoard[y][x] !== EMPTY) {
+                    return false; // Off board or occupied
+                }
+
+                 // Ko check
+                if (koInfo.x === x && koInfo.y === y && koInfo.turn === currentTurn) {
+                    // console.log(`Invalid move due to Ko at (${x}, ${y}) on turn ${currentTurn}`);
+                    return false;
+                }
+
+                // Simulate the move to check for suicide
+                const tempBoard = currentBoard.map(row => [...row]);
+                tempBoard[y][x] = player;
+                let capturesOpponent = false;
+                const opponent = player === BLACK ? WHITE : BLACK;
+
+                // Check if this move captures any opponent groups
+                 [[0, 1], [0, -1], [1, 0], [-1, 0]].forEach(([dx, dy]) => {
+                    const checkX = x + dx;
+                    const checkY = y + dy;
+                    if (isValidCoordinate(checkX, checkY) && tempBoard[checkY][checkX] === opponent) {
+                         const { liberties: opponentLiberties } = findGroupAndLiberties(checkX, checkY, opponent, tempBoard);
+                         if (opponentLiberties.size === 0) {
+                             capturesOpponent = true;
+                         }
+                    }
+                 });
+
+                 if (capturesOpponent) {
+                    return true; // Capturing moves are always valid (not suicide)
+                 }
+
+                // If not capturing, check if the placed stone itself has liberties
+                const { liberties: selfLiberties } = findGroupAndLiberties(x, y, player, tempBoard);
+
+                return selfLiberties.size > 0; // Valid only if the group has liberties (prevents suicide)
+            }
+
+             // Place stone on board state and optionally update DOM
+            function placeStone(x, y, player, updateDOM) {
+                boardState[y][x] = player;
+                let totalCaptured = 0;
+                let capturedStonesCoords = []; // Store coordinates of captured stones
+
+                if (updateDOM) {
+                    addStoneToDOM(x, y, player);
+                }
+
+                const opponent = player === BLACK ? WHITE : BLACK;
+
+                // Check neighbors for captures
+                 [[0, 1], [0, -1], [1, 0], [-1, 0]].forEach(([dx, dy]) => {
+                    const checkX = x + dx;
+                    const checkY = y + dy;
+
+                    if (isValidCoordinate(checkX, checkY) && boardState[checkY][checkX] === opponent) {
+                        const { group, liberties } = findGroupAndLiberties(checkX, checkY, opponent, boardState);
+                        if (liberties.size === 0) {
+                            // Capture the group
+                            group.forEach(key => {
+                                const [grpX, grpY] = key.split(',').map(Number);
+                                boardState[grpY][grpX] = EMPTY;
+                                capturedStonesCoords.push({ x: grpX, y: grpY });
+                                if (updateDOM) {
+                                    removeStoneFromDOM(grpX, grpY);
+                                }
+                            });
+                            totalCaptured += group.size;
+                        }
+                    }
+                });
+
+                // Return info useful for Ko rule (only if exactly one stone was captured)
+                const lastCapture = capturedStonesCoords.length === 1 ? capturedStonesCoords[0] : null;
+                 return { count: totalCaptured, lastCaptureCoords: lastCapture };
+            }
+
+            // --- DOM Manipulation ---
+
+            function addStoneToDOM(x, y, player) {
+                const stone = document.createElement('div');
+                stone.classList.add('stone', player === BLACK ? 'black' : 'white');
+                stone.dataset.x = x;
+                stone.dataset.y = y;
+                 // Position stone centered on the grid intersection using grid coordinates directly
+                 // CSS Grid places items in grid cells. We need to position absolutely relative to the board.
+                 const intersectionElement = boardElement.querySelector(`.intersection[data-x="${x}"][data-y="${y}"]`);
+                 if (intersectionElement) {
+                    // Calculate position based on intersection's offset within the grid container
+                    const boardRect = boardElement.getBoundingClientRect();
+                    const cellWidth = boardRect.width / boardSize;
+                    const cellHeight = boardRect.height / boardSize;
+
+                    // Adjust position to center the stone on the intersection point, not the cell center
+                    stone.style.position = 'absolute'; // Ensure it's absolutely positioned
+                    stone.style.left = `${(x / (boardSize -1)) * 100}%`; // Position along the line
+                    stone.style.top = `${(y / (boardSize -1)) * 100}%`; // Position along the line
+                    stone.style.transform = 'translate(-50%, -50%)'; // Center on the point
+
+                    // Calculate size relative to cell size for consistency
+                    const stoneSize = Math.min(cellWidth, cellHeight) * 0.9; // 90% of cell size
+                    stone.style.width = `${stoneSize}px`;
+                    stone.style.height = `${stoneSize}px`;
+
+                    boardElement.appendChild(stone); // Append to board, not intersection
+                 } else {
+                    console.error(`Could not find intersection element for ${x}, ${y}`);
+                 }
+            }
+
+
+            function removeStoneFromDOM(x, y) {
+                 const stoneToRemove = boardElement.querySelector(`.stone[data-x="${x}"][data-y="${y}"]`);
+                 if (stoneToRemove) {
+                    stoneToRemove.remove();
+                 }
+            }
+
+            // --- Player and Turn Management ---
+
+            function switchPlayer() {
+                 currentPlayer = (currentPlayer === BLACK) ? WHITE : BLACK;
+                 currentTurn++;
+                 updateMessage(`第 ${currentTurn} 手, 轮到 ${PlayerName[currentPlayer]} 落子...`);
+
+                 if (currentPlayer === WHITE && !gameOver) {
+                    // AI's turn
+                    enableControls(false); // Disable controls during AI thinking
+                    // Use setTimeout to allow UI update before potentially blocking AI calculation
+                    setTimeout(aiMove, 50);
+                 } else if (!gameOver) {
+                    enableControls(true); // Re-enable for human player
+                 }
+            }
+
+            function resetPassCounter() {
+                passCounter = 0;
+            }
+
+            function updateMessage(msg) {
+                messageArea.textContent = msg;
+            }
+
+             function enableControls(enable) {
+                passBtn.disabled = !enable;
+                // Disable clicking on board intersections by adding/removing a class or overlay
+                boardElement.style.pointerEvents = enable ? 'auto' : 'none';
+                 if (!enable) {
+                     boardElement.style.cursor = 'wait';
+                 } else {
+                     boardElement.style.cursor = ''; // Reset cursor
+                 }
+            }
+
+            function endGame(message) {
+                gameOver = true;
+                updateMessage(message);
+                enableControls(false); // Disable all controls except New Game
+                passBtn.disabled = true; // Keep pass disabled
+                 boardElement.style.pointerEvents = 'none'; // Disable board clicks permanently
+                 boardElement.style.cursor = 'default';
+            }
+
+            // --- AI Logic (Minimax with Alpha-Beta) ---
+
+            function aiMove() {
+                updateMessage(`第 ${currentTurn} 手, ${PlayerName[WHITE]} (AI) 正在思考 (深度 ${aiDepth})...`);
+
+                // Use performance.now() for timing if needed
+                // const startTime = performance.now();
+
+                const bestMove = findBestMove(boardState, aiDepth);
+
+                // const endTime = performance.now();
+                // console.log(`AI calculation time: ${((endTime - startTime) / 1000).toFixed(2)}s`);
+
+                if (bestMove) {
+                    const capturedInfo = placeStone(bestMove.x, bestMove.y, WHITE, true);
+                    resetPassCounter();
+
+                     // Update Ko info if AI move caused a single capture
+                    if (capturedInfo.count === 1 && capturedInfo.lastCaptureCoords) {
+                        koInfo.x = capturedInfo.lastCaptureCoords.x;
+                        koInfo.y = capturedInfo.lastCaptureCoords.y;
+                        koInfo.turn = currentTurn + 1; // Ko active for next turn
+                         // console.log(`AI set Ko rule for turn ${koInfo.turn} at (${koInfo.x}, ${koInfo.y})`);
+                    } else {
+                         koInfo = { x: null, y: null, turn: 0 }; // Reset Ko
+                    }
+
+                    switchPlayer(); // Switch back to human
+                } else {
+                    // AI chooses to pass if no good move found (or evaluation suggests passing)
+                    handlePass();
+                }
+                 // Ensure controls are re-enabled for the human player after AI move or pass
+                 if (!gameOver) {
+                     enableControls(true);
+                 }
+            }
+
+
+            function findBestMove(currentBoard, depth) {
+                let bestScore = -Infinity;
+                let bestMove = null;
+                let alpha = -Infinity;
+                let beta = Infinity;
+
+                const possibleMoves = getValidMoves(WHITE, currentBoard);
+
+                if (possibleMoves.length === 0) {
+                    return null; // AI must pass
+                }
+
+                // Basic move ordering: try center moves first? (Simple heuristic)
+                possibleMoves.sort((a, b) => {
+                    const distA = Math.abs(a.x - Math.floor(boardSize / 2)) + Math.abs(a.y - Math.floor(boardSize / 2));
+                    const distB = Math.abs(b.x - Math.floor(boardSize / 2)) + Math.abs(b.y - Math.floor(boardSize / 2));
+                    return distA - distB;
+                });
+
+
+                for (const move of possibleMoves) {
+                    // Simulate the move
+                    const tempBoard = currentBoard.map(row => [...row]);
+                    const capturedInfo = simulatePlaceStone(move.x, move.y, WHITE, tempBoard); // Simulate captures too
+
+                    // Check Ko validity *after* simulation, but before recursing
+                    if (koInfo.x === move.x && koInfo.y === move.y && koInfo.turn === currentTurn) {
+                        continue; // Skip this move if it violates Ko rule
+                    }
+
+                    // Store original Ko state and update if necessary for recursion
+                    const originalKoInfo = { ...koInfo };
+                    if (capturedInfo.count === 1 && capturedInfo.lastCaptureCoords) {
+                        koInfo.x = capturedInfo.lastCaptureCoords.x;
+                        koInfo.y = capturedInfo.lastCaptureCoords.y;
+                        koInfo.turn = currentTurn + 1; // Ko for the *next* simulated turn
+                    } else {
+                        koInfo = { x: null, y: null, turn: 0 };
+                    }
+                    currentTurn++; // Simulate turn increment for Ko check in recursion
+
+                    const score = minimax(tempBoard, depth - 1, alpha, beta, false); // Minimizing player (human) next
+
+                    // Backtrack Ko state and turn count
+                    currentTurn--;
+                    koInfo = originalKoInfo;
+
+
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestMove = move;
+                    }
+                    alpha = Math.max(alpha, score); // Update alpha for pruning
+                     // Pruning commented out at top level, but keep alpha update
+                     // if (beta <= alpha) {
+                     //    break; // Beta cut-off (won't happen at top level unless initial beta is low)
+                     // }
+                }
+
+                // console.log("AI Best Score:", bestScore, "Move:", bestMove);
+                return bestMove;
+            }
+
+            function minimax(currentBoard, depth, alpha, beta, isMaximizingPlayer) {
+                 if (depth === 0) { // Or add game over condition check
+                    return evaluateBoard(currentBoard);
+                 }
+
+                const player = isMaximizingPlayer ? WHITE : BLACK;
+                const possibleMoves = getValidMoves(player, currentBoard);
+
+                if (possibleMoves.length === 0) {
+                    // If no moves, maybe evaluate board or return pass score?
+                    // Let's just evaluate the current state if no moves possible.
+                    // A better approach might involve checking consecutive passes.
+                     return evaluateBoard(currentBoard);
+                 }
+
+                // Move ordering (simple - could be improved)
+                 possibleMoves.sort((a, b) => {
+                    const distA = Math.abs(a.x - Math.floor(boardSize / 2)) + Math.abs(a.y - Math.floor(boardSize / 2));
+                    const distB = Math.abs(b.x - Math.floor(boardSize / 2)) + Math.abs(b.y - Math.floor(boardSize / 2));
+                    return distA - distB;
+                });
+
+
+                if (isMaximizingPlayer) { // AI (White)
+                    let maxEval = -Infinity;
+                    for (const move of possibleMoves) {
+                         const tempBoard = currentBoard.map(row => [...row]);
+                         const capturedInfo = simulatePlaceStone(move.x, move.y, player, tempBoard);
+
+                        // Store original Ko state and update if necessary
+                        const originalKoInfo = { ...koInfo };
+                        if (capturedInfo.count === 1 && capturedInfo.lastCaptureCoords) {
+                            koInfo.x = capturedInfo.lastCaptureCoords.x;
+                            koInfo.y = capturedInfo.lastCaptureCoords.y;
+                            koInfo.turn = currentTurn + 1; // Ko for next simulated turn
+                        } else {
+                            koInfo = { x: null, y: null, turn: 0 };
+                        }
+                        currentTurn++; // Simulate turn increment
+
+                        const evalScore = minimax(tempBoard, depth - 1, alpha, beta, false);
+
+                        // Backtrack Ko state and turn count
+                        currentTurn--;
+                        koInfo = originalKoInfo;
+
+
+                        maxEval = Math.max(maxEval, evalScore);
+                        alpha = Math.max(alpha, evalScore);
+                        if (beta <= alpha) {
+                            break; // Beta cut-off
+                        }
+                    }
+                    return maxEval;
+                } else { // Human (Black) - Minimizing AI's score
+                    let minEval = Infinity;
+                    for (const move of possibleMoves) {
+                         const tempBoard = currentBoard.map(row => [...row]);
+                         const capturedInfo = simulatePlaceStone(move.x, move.y, player, tempBoard);
+
+                         // Store original Ko state and update if necessary
+                        const originalKoInfo = { ...koInfo };
+                        if (capturedInfo.count === 1 && capturedInfo.lastCaptureCoords) {
+                            koInfo.x = capturedInfo.lastCaptureCoords.x;
+                            koInfo.y = capturedInfo.lastCaptureCoords.y;
+                            koInfo.turn = currentTurn + 1; // Ko for next simulated turn
+                        } else {
+                            koInfo = { x: null, y: null, turn: 0 };
+                        }
+                        currentTurn++; // Simulate turn increment
+
+                        const evalScore = minimax(tempBoard, depth - 1, alpha, beta, true);
+
+                        // Backtrack Ko state and turn count
+                        currentTurn--;
+                        koInfo = originalKoInfo;
+
+
+                        minEval = Math.min(minEval, evalScore);
+                        beta = Math.min(beta, evalScore);
+                        if (beta <= alpha) {
+                            break; // Alpha cut-off
+                        }
+                    }
+                    return minEval;
+                }
+            }
+
+            // Simple evaluation: Stone difference + basic liberty count bonus/penalty
+            // Higher score is better for WHITE (AI)
+            function evaluateBoard(currentBoard) {
+                let score = 0;
+                let whiteStones = 0;
+                let blackStones = 0;
+                let whiteLiberties = 0;
+                let blackLiberties = 0;
+                const visited = new Set(); // Keep track of visited groups
+
+                for (let y = 0; y < boardSize; y++) {
+                    for (let x = 0; x < boardSize; x++) {
+                         const key = `${x},${y}`;
+                        if (currentBoard[y][x] !== EMPTY && !visited.has(key)) {
+                            const player = currentBoard[y][x];
+                             const { group, liberties } = findGroupAndLiberties(x, y, player, currentBoard);
+
+                             group.forEach(gKey => visited.add(gKey)); // Mark all stones in group as visited
+
+                             if (player === WHITE) {
+                                whiteStones += group.size;
+                                whiteLiberties += liberties.size;
+                                // Bonus for groups with few liberties (Atari is 1 liberty)
+                                // if(liberties.size === 1) score += 5; // Bonus for putting black in atari (indirectly via opponent's turn eval)
+                                // if(liberties.size === 2) score += 1;
+                             } else {
+                                blackStones += group.size;
+                                blackLiberties += liberties.size;
+                                 // Penalty for AI groups with few liberties
+                                // if(liberties.size === 1) score -= 5; // Penalty for being in atari
+                                // if(liberties.size === 2) score -= 1;
+                             }
+                        }
+                    }
+                }
+
+                // Simple stone difference (positive favors WHITE)
+                score += (whiteStones - blackStones) * 10; // Weight stone difference higher
+
+                 // Liberty difference (positive favors WHITE) - small weight
+                 score += (whiteLiberties - blackLiberties) * 1;
+
+                // Add heuristics? e.g., stones near center, connections, potential territory (harder)
+                // For simplicity, stick to stone diff + liberties
+
+                return score;
+            }
+
+            function getValidMoves(player, currentBoard) {
+                const moves = [];
+                for (let y = 0; y < boardSize; y++) {
+                    for (let x = 0; x < boardSize; x++) {
+                        // Pass currentTurn here for Ko check
+                        if (isValidMove(x, y, player, currentBoard)) {
+                            moves.push({ x, y });
+                        }
+                    }
+                }
+                return moves;
+            }
+
+            // Version of placeStone for simulation - modifies board directly, no DOM updates
+             function simulatePlaceStone(x, y, player, simulationBoard) {
+                simulationBoard[y][x] = player;
+                let totalCaptured = 0;
+                let capturedCoords = null; // Track last *single* capture for Ko
+
+                const opponent = player === BLACK ? WHITE : BLACK;
+                let capturedGroupsInfo = []; // Store info to potentially revert captures if needed (though simple minimax usually doesn't revert)
+
+                 [[0, 1], [0, -1], [1, 0], [-1, 0]].forEach(([dx, dy]) => {
+                    const checkX = x + dx;
+                    const checkY = y + dy;
+
+                    if (isValidCoordinate(checkX, checkY) && simulationBoard[checkY][checkX] === opponent) {
+                        const { group, liberties } = findGroupAndLiberties(checkX, checkY, opponent, simulationBoard);
+                        if (liberties.size === 0) {
+                            let currentGroupCoords = [];
+                            group.forEach(key => {
+                                const [grpX, grpY] = key.split(',').map(Number);
+                                simulationBoard[grpY][grpX] = EMPTY; // Remove from simulation board
+                                currentGroupCoords.push({x: grpX, y: grpY});
+                            });
+                             capturedGroupsInfo.push({ player: opponent, stones: currentGroupCoords });
+                             totalCaptured += group.size;
+                             if (group.size === 1) {
+                                capturedCoords = currentGroupCoords[0]; // Potential Ko point
+                             } else {
+                                capturedCoords = null; // Multiple stones captured, reset Ko potential from this specific capture event
+                             }
+                         }
+                     }
+                 });
+                 // Return info needed for Ko rule processing
+                 return { count: totalCaptured, lastCaptureCoords: totalCaptured === 1 ? capturedCoords : null };
+            }
+
+
+            // --- Initial Game Start ---
+            initializeGame();
+
+        }); // End DOMContentLoaded
+    </script>
+
+</body>
+</html>
