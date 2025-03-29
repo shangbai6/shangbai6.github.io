@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- CDN URL for gif.js (using jsDelivr) -->
+    <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
+
+    <title>宫格图转GIF转换器</title>
+    <style>
+        /* CSS 样式保持不变 */
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+            background-color: #f4f4f4;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            max-width: 800px;
+            width: 100%;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .controls, .preview {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="file"],
+        input[type="number"] {
+            display: block;
+            width: calc(100% - 22px); /* 考虑内边距和边框 */
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        input[type="file"] {
+           color: #555;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+            display: block;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #aaa;
+            cursor: not-allowed;
+        }
+        #status {
+            margin-top: 15px;
+            font-weight: bold;
+            text-align: center;
+            min-height: 20px;
+            color: #d9534f;
+        }
+        .preview-image {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 10px auto;
+            border: 1px solid #eee;
+        }
+        #downloadLink {
+            display: none;
+            text-align: center;
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #28a745;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        #downloadLink:hover {
+            background-color: #218838;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>宫格图转GIF转换器</h1>
+
+        <div class="controls">
+            <label for="imageUpload">1. 上传图片：</label>
+            <input type="file" id="imageUpload" accept="image/*">
+
+            <label for="rows">2. 行数：</label>
+            <input type="number" id="rows" value="4" min="1">
+
+            <label for="cols">3. 列数：</label>
+            <input type="number" id="cols" value="4" min="1">
+
+            <label for="delay">4. 帧延迟 (毫秒)：</label>
+            <input type="number" id="delay" value="100" min="10">
+
+            <!-- 初始禁用生成按钮，等待 Worker 加载 -->
+            <button id="generateBtn" disabled>初始化中...</button>
+            <p id="status"></p>
+        </div>
+
+        <div class="preview">
+            <h2>预览</h2>
+            <p>原始图片：</p>
+            <img id="originalImage" src="#" alt="原始图片预览" style="display: none;" class="preview-image"/>
+            <p>生成的 GIF：</p>
+            <img id="resultGif" src="#" alt="生成的 GIF 预览" style="display: none;" class="preview-image"/>
+            <a id="downloadLink" href="#" download="animated_sprite.gif">下载 GIF</a>
+        </div>
+    </div>
+
+    <script>
+        const imageUpload = document.getElementById('imageUpload');
+        const rowsInput = document.getElementById('rows');
+        const colsInput = document.getElementById('cols');
+        const delayInput = document.getElementById('delay');
+        const generateBtn = document.getElementById('generateBtn');
+        const statusElement = document.getElementById('status');
+        const originalImageElement = document.getElementById('originalImage');
+        const resultGifElement = document.getElementById('resultGif');
+        const downloadLink = document.getElementById('downloadLink');
+
+        let sourceImage = null;
+        let sourceImageDataUrl = null;
+        let gifObjectUrl = null;
+        let workerBlobUrl = null; // 存储 Worker 的 Blob URL
+
+        const gifWorkerScriptPath = 'https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js';
+
+        // --- ** 异步初始化 Worker ** ---
+        async function initializeWorker() {
+            statusElement.textContent = '正在加载 GIF 处理核心...';
+            try {
+                const response = await fetch(gifWorkerScriptPath);
+                if (!response.ok) {
+                    throw new Error(`无法下载 Worker 脚本: ${response.status} ${response.statusText}`);
+                }
+                const workerScriptText = await response.text();
+                const blob = new Blob([workerScriptText], { type: 'application/javascript' });
+                workerBlobUrl = URL.createObjectURL(blob);
+                console.log('Worker Blob URL 创建成功:', workerBlobUrl);
+                statusElement.textContent = 'GIF 处理核心加载完成，请上传图片。';
+                // 此时可以启用上传功能，但生成按钮在上传后才启用
+                generateBtn.textContent = '生成 GIF'; // 按钮文本恢复
+                // generateBtn.disabled = false; // 先不启用，等图片上传
+            } catch (error) {
+                console.error('初始化 Worker 失败:', error);
+                statusElement.textContent = `错误：无法加载 GIF 处理核心。请检查网络或刷新页面。(${error.message})`;
+                generateBtn.textContent = '加载失败'; // 指示错误
+                generateBtn.disabled = true; // 保持禁用
+            }
+        }
+
+        // 页面加载时开始初始化 Worker
+        document.addEventListener('DOMContentLoaded', initializeWorker);
+
+
+        // --- 其他逻辑不变 ---
+        imageUpload.addEventListener('change', (event) => {
+            if (gifObjectUrl) {
+                URL.revokeObjectURL(gifObjectUrl);
+                gifObjectUrl = null;
+            }
+
+            const file = event.target.files[0];
+            if (!file || !file.type.startsWith('image/')) {
+                statusElement.textContent = '请选择有效的图片文件。';
+                 generateBtn.disabled = true; // 确保按钮禁用
+                originalImageElement.style.display = 'none';
+                resultGifElement.style.display = 'none';
+                downloadLink.style.display = 'none';
+                sourceImage = null;
+                sourceImageDataUrl = null;
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                sourceImageDataUrl = e.target.result;
+                originalImageElement.src = sourceImageDataUrl;
+                originalImageElement.style.display = 'block';
+                resultGifElement.style.display = 'none';
+                downloadLink.style.display = 'none';
+
+                // 只有当 Worker URL 准备好时，才启用生成按钮
+                if (workerBlobUrl) {
+                    statusElement.textContent = '图片已加载，可以生成了。';
+                    generateBtn.disabled = false;
+                } else {
+                     statusElement.textContent = '图片已加载，但 GIF 核心未就绪。';
+                     generateBtn.disabled = true;
+                }
+
+
+                sourceImage = new Image();
+                sourceImage.onload = () => {
+                     console.log("图片加载完成，尺寸:", sourceImage.naturalWidth, "x", sourceImage.naturalHeight);
+                };
+                sourceImage.onerror = () => {
+                    statusElement.textContent = '加载图片时出错。';
+                    generateBtn.disabled = true;
+                    sourceImage = null;
+                };
+                sourceImage.src = sourceImageDataUrl;
+            }
+            reader.onerror = () => {
+                statusElement.textContent = '读取文件出错。';
+                generateBtn.disabled = true;
+                sourceImage = null;
+                sourceImageDataUrl = null;
+            }
+            reader.readAsDataURL(file);
+        });
+
+        generateBtn.addEventListener('click', () => {
+
+             // 再次检查 GIF 库和 Worker URL
+             if (typeof GIF === 'undefined') {
+                 statusElement.textContent = '错误：GIF 主库未能加载！请检查网络连接并刷新。';
+                 return;
+             }
+             if (!workerBlobUrl) {
+                 statusElement.textContent = '错误：GIF Worker 未能加载！请刷新页面重试。';
+                 return;
+             }
+
+
+            if (!sourceImage || !sourceImage.complete || sourceImage.naturalWidth === 0) {
+                statusElement.textContent = '请等待图片加载完成或选择有效的图片。';
+                return;
+            }
+
+            const rows = parseInt(rowsInput.value, 10);
+            const cols = parseInt(colsInput.value, 10);
+            const delay = parseInt(delayInput.value, 10);
+
+            if (isNaN(rows) || rows <= 0 || isNaN(cols) || cols <= 0 || isNaN(delay) || delay <= 0) {
+                statusElement.textContent = '请输入有效的行数、列数和延迟时间。';
+                return;
+            }
+
+            generateBtn.disabled = true;
+            statusElement.textContent = '处理中... 正在初始化 GIF 编码器...';
+            resultGifElement.style.display = 'none';
+            downloadLink.style.display = 'none';
+
+             if (gifObjectUrl) {
+                URL.revokeObjectURL(gifObjectUrl);
+                gifObjectUrl = null;
+             }
+
+
+            setTimeout(() => {
+                try {
+                    const calculatedWidth = sourceImage.naturalWidth / cols;
+                    const calculatedHeight = sourceImage.naturalHeight / rows;
+                    const frameWidth = Math.round(calculatedWidth);
+                    const frameHeight = Math.round(calculatedHeight);
+
+                    if (frameWidth <= 0 || frameHeight <= 0) {
+                        throw new Error(`计算得到的帧尺寸无效 (宽: ${frameWidth}, 高: ${frameHeight})。请检查行列数和图片尺寸。`);
+                    }
+
+                    const gif = new GIF({
+                        workers: 2,
+                        quality: 10,
+                        workerScript: workerBlobUrl, // ** 使用 Blob URL **
+                        width: frameWidth,
+                        height: frameHeight,
+                        background: '#00000000',
+                        transparent: 0x00FF00
+                    });
+
+                    const frameCanvas = document.createElement('canvas');
+                    frameCanvas.width = frameWidth;
+                    frameCanvas.height = frameHeight;
+                    const ctx = frameCanvas.getContext('2d');
+
+                    statusElement.textContent = `处理中... 正在提取 ${rows * cols} 帧...`;
+
+                    for (let r = 0; r < rows; r++) {
+                        for (let c = 0; c < cols; c++) {
+                            ctx.clearRect(0, 0, frameWidth, frameHeight);
+                            const sx_ideal = c * calculatedWidth;
+                            const sy_ideal = r * calculatedHeight;
+                            const sx = Math.round(sx_ideal);
+                            const sy = Math.round(sy_ideal);
+                            const sWidth = Math.max(0, Math.min(frameWidth, sourceImage.naturalWidth - sx));
+                            const sHeight = Math.max(0, Math.min(frameHeight, sourceImage.naturalHeight - sy));
+
+                            if (sWidth > 0 && sHeight > 0) {
+                                ctx.drawImage(
+                                    sourceImage,
+                                    sx, sy, sWidth, sHeight,
+                                    0, 0, sWidth, sHeight
+                                );
+                            }
+                            gif.addFrame(ctx, { copy: true, delay: delay });
+                        }
+                    }
+
+                    gif.on('finished', (blob) => {
+                        gifObjectUrl = URL.createObjectURL(blob);
+                        resultGifElement.src = gifObjectUrl;
+                        resultGifElement.style.display = 'block';
+                        downloadLink.href = gifObjectUrl;
+                        downloadLink.style.display = 'block';
+                        statusElement.textContent = 'GIF 生成成功！';
+                        generateBtn.disabled = false; // 重新启用按钮
+                    });
+
+                    gif.on('progress', (p) => {
+                         statusElement.textContent = `处理中... 正在渲染 GIF (${(p * 100).toFixed(0)}%)`;
+                    });
+
+                    statusElement.textContent = '处理中... 正在渲染 GIF (0%)...';
+                    gif.render();
+
+                } catch (error) {
+                    console.error("GIF 生成错误:", error);
+                    statusElement.textContent = `错误：${error.message}`;
+                    generateBtn.disabled = false; // 出错时也重新启用按钮
+                }
+            }, 50);
+        });
+
+        // 页面卸载时清理 Blob URL
+        window.addEventListener('unload', () => {
+             if (workerBlobUrl) {
+                 URL.revokeObjectURL(workerBlobUrl);
+                 console.log("Worker Blob URL revoked on unload.");
+             }
+             if (gifObjectUrl) {
+                 URL.revokeObjectURL(gifObjectUrl);
+             }
+         });
+
+    </script>
+</body>
+</html>
