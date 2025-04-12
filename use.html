@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>使用预训练的字符序列预测模型 (增强版)</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; padding: 20px; }
+        .container { max-width: 700px; margin: auto; }
+        h1 { text-align: center; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input[type="text"], input[type="number"] { width: calc(100% - 22px); padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        .param-group { margin-bottom: 15px; }
+        .param-group label { display: inline-block; width: 150px; }
+        .param-group input[type="number"] { width: 100px; }
+        button { padding: 10px 15px; cursor: pointer; margin-right: 10px; margin-bottom: 10px; background-color: #28a745; color: white; border: none; border-radius: 4px; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        button:hover:not(:disabled) { background-color: #218838; }
+        #status, #predictResultUse { margin-top: 15px; font-weight: bold; padding: 10px; border: 1px solid #eee; background-color: #f9f9f9; border-radius: 4px; word-wrap: break-word; } /* Added word-wrap */
+        .error { color: red; font-weight: bold; margin-top: 10px; }
+        .info { font-size: 0.9em; color: #555; margin-bottom: 15px; }
+        hr { margin: 25px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>使用字符序列预测模型 (增强版)</h1>
+
+        <label for="modelPath">模型文件路径 (相对于此 HTML):</label>
+        <input type="text" id="modelPath" value="http://sehsapneb.me/model.json" placeholder="例如: ./models/model.json 或 https://username.github.io/repo/model.json">
+        <div class="info">输入 `model.json` 文件的路径。权重文件 (`weights.bin`) 应在同一目录下。</div>
+        <button id="loadModelButton">加载模型</button>
+        <div id="status">状态：等待加载模型...</div>
+        <div id="loadError" class="error"></div>
+
+        <hr>
+
+        <h2>开始预测/生成</h2>
+        <p>模型加载成功后，输入一个起始（种子）序列。长度不足或超长会自动处理。</p>
+
+        <label for="predictSequenceUse">输入起始序列 (只包含 A, B, C):</label>
+        <input type="text" id="predictSequenceUse" placeholder="例如: AB 或 ABCABCABCABC" disabled>
+
+        <div class="param-group">
+            <label for="generateLength">生成序列长度:</label>
+            <input type="number" id="generateLength" value="10" min="1" max="200" disabled>
+             <small>(要连续预测多少个字符)</small>
+        </div>
+
+        <button id="predictButtonUse" disabled>预测/生成序列</button>
+        <div id="predictResultUse">预测结果将显示在这里。</div>
+        <div id="predictErrorUse" class="error"></div>
+    </div>
+
+    <script>
+        // --- 全局变量和常量 ---
+        const charToIndex = { 'A': 0, 'B': 1, 'C': 2 };
+        const indexToChar = { 0: 'A', 1: 'B', 2: 'C' };
+        const VOCAB_SIZE = 3;
+        const PADDING_CHAR = 'A'; // 定义用于填充的字符
+        let model = null;
+        let loadedModelSequenceLength = 0; // 模型训练时使用的序列长度
+
+        // --- DOM 元素引用 ---
+        const modelPathInput = document.getElementById('modelPath');
+        const loadModelButton = document.getElementById('loadModelButton');
+        const statusDiv = document.getElementById('status');
+        const loadErrorDiv = document.getElementById('loadError');
+        const predictSequenceUseInput = document.getElementById('predictSequenceUse');
+        const generateLengthInput = document.getElementById('generateLength');
+        const predictButtonUse = document.getElementById('predictButtonUse');
+        const predictResultUseDiv = document.getElementById('predictResultUse');
+        const predictErrorUseDiv = document.getElementById('predictErrorUse');
+
+        // --- 事件监听 ---
+        loadModelButton.addEventListener('click', loadModel);
+        predictButtonUse.addEventListener('click', handlePredictUse);
+
+        // --- 功能函数 ---
+
+        // 更新状态显示
+        function updateStatus(message, isError = false) {
+            statusDiv.textContent = `状态：${message}`;
+            statusDiv.style.color = isError ? 'red' : 'black';
+            if (isError) console.error(message);
+        }
+
+        // 更新错误显示
+        function displayError(element, message) {
+            element.textContent = message;
+        }
+
+        // 清除错误显示
+        function clearErrors() {
+            loadErrorDiv.textContent = '';
+            predictErrorUseDiv.textContent = '';
+        }
+
+        // 加载模型
+        async function loadModel() {
+            clearErrors();
+            loadModelButton.disabled = true;
+            predictSequenceUseInput.disabled = true;
+            generateLengthInput.disabled = true;
+            predictButtonUse.disabled = true;
+            updateStatus("开始加载模型...");
+
+            const modelUrl = modelPathInput.value.trim();
+            if (!modelUrl) {
+                updateStatus("错误：请输入模型文件的路径。", true);
+                displayError(loadErrorDiv, "模型路径不能为空。");
+                loadModelButton.disabled = false;
+                return;
+            }
+
+            try {
+                model = await tf.loadLayersModel(modelUrl);
+                model.summary(); // 打印模型信息到控制台
+
+                // **重要**: 从加载的模型配置中获取输入的序列长度
+                if (model.inputs && model.inputs.length > 0 && model.inputs[0].shape && model.inputs[0].shape.length >= 2) {
+                     loadedModelSequenceLength = model.inputs[0].shape[1]; // Shape is [null, sequence_length, vocab_size]
+                     if (!loadedModelSequenceLength || typeof loadedModelSequenceLength !== 'number' || loadedModelSequenceLength <= 0) {
+                         throw new Error("无法从模型配置中自动确定有效的输入序列长度。");
+                     }
+                     predictSequenceUseInput.placeholder = `输入起始序列 (模型需要 ${loadedModelSequenceLength} 位输入)`;
+                     predictSequenceUseInput.disabled = false;
+                     generateLengthInput.disabled = false;
+                     predictButtonUse.disabled = false;
+                     updateStatus(`模型加载成功！模型训练时使用的输入序列长度为 ${loadedModelSequenceLength}。`);
+                 } else {
+                     throw new Error("加载的模型结构不符合预期，无法确定输入序列长度。");
+                 }
+
+            } catch (error) {
+                updateStatus(`加载模型失败: ${error.message}`, true);
+                displayError(loadErrorDiv, `无法从 ${modelUrl} 加载模型。请检查路径和网络连接，并确保模型文件 (model.json, weights.bin) 存在且可访问。查看控制台获取详细错误。`);
+                console.error("加载模型错误:", error);
+                // 重置 UI 状态
+                 predictSequenceUseInput.placeholder = '加载模型后输入...';
+            } finally {
+                loadModelButton.disabled = false; // 无论成功失败都重新启用加载按钮
+            }
+        }
+
+        // 验证输入序列中的字符是否有效
+         function validateSequenceChars(sequence) {
+             if (!sequence) return "输入序列不能为空。"; // 允许空输入，后面会处理
+             const allowedChars = new Set(Object.keys(charToIndex));
+             for (let i = 0; i < sequence.length; i++) {
+                 if (!allowedChars.has(sequence[i])) {
+                     return `序列在位置 ${i} 包含无效字符 '${sequence[i]}'。只允许 A, B, C。`;
+                 }
+             }
+             return null; // No error
+         }
+
+        // 准备用于模型预测的输入序列 (处理长度不足或超长)
+        function prepareInputSequence(rawInput) {
+            let sequence = rawInput.trim().toUpperCase();
+            if (sequence.length < loadedModelSequenceLength) {
+                // 长度不足，在前面填充 PADDING_CHAR
+                const padding = PADDING_CHAR.repeat(loadedModelSequenceLength - sequence.length);
+                console.log(`Input too short. Padding with ${padding.length} '${PADDING_CHAR}' chars.`);
+                return padding + sequence;
+            } else if (sequence.length > loadedModelSequenceLength) {
+                // 长度超长，取最后 N 个字符
+                console.log(`Input too long. Using last ${loadedModelSequenceLength} chars.`);
+                return sequence.slice(-loadedModelSequenceLength);
+            } else {
+                // 长度正好
+                return sequence;
+            }
+        }
+
+        // 预测下一个字符 (核心预测逻辑)
+        function predictNextChar(inputSequence) {
+             if (!model) throw new Error("模型未加载。");
+             if (inputSequence.length !== loadedModelSequenceLength) {
+                 // 这个函数理论上应该总是接收到正确长度的序列
+                 throw new Error(`内部错误：predictNextChar接收到的序列长度 (${inputSequence.length}) 与模型要求的长度 (${loadedModelSequenceLength}) 不匹配。`);
+             }
+
+             // 使用 tf.tidy 自动管理内存
+             return tf.tidy(() => {
+                 // 1. 将输入序列转换为 One-hot 编码
+                 const inputTensor = tf.tensor3d(
+                     [inputSequence.split('').map(char => tf.oneHot(charToIndex[char], VOCAB_SIZE).arraySync())],
+                     [1, loadedModelSequenceLength, VOCAB_SIZE] // Shape: [batch_size=1, seq_length, vocab_size]
+                 );
+
+                 // 2. 使用模型进行预测
+                 const prediction = model.predict(inputTensor);
+
+                 // 3. 从预测结果（概率分布）中找到最可能的字符索引
+                 // 使用 softmax 后的概率进行采样可能产生更有趣的结果，但 argMax 更直接
+                 const predictedIndex = tf.argMax(prediction, axis=1).dataSync()[0];
+
+                 // 4. 将索引转换回字符
+                 return indexToChar[predictedIndex];
+             });
+        }
+
+
+        // 处理预测/生成请求
+        async function handlePredictUse() {
+             clearErrors();
+             predictButtonUse.disabled = true; // 禁用按钮防止重复点击
+             predictResultUseDiv.textContent = "处理中...";
+
+             const rawSeedSequence = predictSequenceUseInput.value;
+             const generateLength = parseInt(generateLengthInput.value);
+
+             // 验证输入字符
+             const charValidationError = validateSequenceChars(rawSeedSequence);
+             if (charValidationError) {
+                 predictResultUseDiv.textContent = `错误: ${charValidationError}`;
+                 displayError(predictErrorUseDiv, charValidationError);
+                 predictButtonUse.disabled = false;
+                 return;
+             }
+             // 验证生成长度
+             if (isNaN(generateLength) || generateLength < 1) {
+                 const msg = "请输入有效的生成序列长度（大于0的整数）。";
+                 predictResultUseDiv.textContent = `错误: ${msg}`;
+                 displayError(predictErrorUseDiv, msg);
+                 predictButtonUse.disabled = false;
+                 return;
+             }
+             // 检查模型是否加载
+             if (!model || loadedModelSequenceLength <= 0) {
+                 const msg = "模型尚未成功加载，无法进行预测。";
+                 predictResultUseDiv.textContent = `错误: ${msg}`;
+                 displayError(predictErrorUseDiv, msg);
+                 predictButtonUse.disabled = false;
+                 return;
+             }
+
+
+             try {
+                 updateStatus("准备输入序列并开始生成...");
+                 await tf.nextFrame(); // 给 UI 一点时间响应
+
+                 let currentInputSequence = prepareInputSequence(rawSeedSequence);
+                 let generatedSequence = "";
+                 predictResultUseDiv.textContent = `使用种子: "${currentInputSequence}" (长度 ${currentInputSequence.length})\n生成中 (0/${generateLength})...`;
+
+                 for (let i = 0; i < generateLength; i++) {
+                     // 1. 预测下一个字符
+                     const nextChar = predictNextChar(currentInputSequence);
+
+                     // 2. 将预测结果追加到生成序列中
+                     generatedSequence += nextChar;
+
+                     // 3. 更新下一次迭代的输入序列
+                     //    (移除当前输入序列的第一个字符，并追加新预测的字符)
+                     currentInputSequence = currentInputSequence.slice(1) + nextChar;
+
+                     // 更新 UI (可选，如果生成很长可以减少更新频率)
+                     if ((i + 1) % 5 === 0 || i === generateLength - 1) {
+                         predictResultUseDiv.textContent = `使用种子: "${prepareInputSequence(rawSeedSequence)}"\n生成中 (${i + 1}/${generateLength}): ${generatedSequence}`;
+                         await tf.nextFrame(); // 允许 UI 更新
+                     }
+                 }
+
+                 updateStatus("生成完成！");
+                 predictResultUseDiv.textContent = `起始序列 (处理后): "${prepareInputSequence(rawSeedSequence)}"\n生成的 ${generateLength} 个字符: ${generatedSequence}`;
+
+             } catch (error) {
+                 updateStatus(`生成过程中发生错误: ${error.message}`, true);
+                 predictResultUseDiv.textContent = `生成时发生错误: ${error.message}`;
+                 displayError(predictErrorUseDiv, `生成失败: ${error.message}. 检查控制台获取更多信息.`);
+                 console.error("生成/预测错误:", error);
+             } finally {
+                  predictButtonUse.disabled = false; // 重新启用按钮
+             }
+        }
+
+    </script>
+</body>
+</html>
