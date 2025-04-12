@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Title updated to reflect multi-sequence capability -->
+    <title>训练字符序列预测模型 (多序列支持)</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Original Styles from the first prompt */
+        body { font-family: sans-serif; line-height: 1.6; padding: 20px; }
+        .container { max-width: 800px; margin: auto; }
+        h1, h2 { text-align: center; }
+        textarea { width: 100%; min-height: 150px; margin-bottom: 10px; font-family: monospace; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input[type="number"], input[type="text"] { padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        .param-group { margin-bottom: 10px; } /* Keep original simple margin */
+        .param-group label { display: inline-block; min-width: 120px; margin-right: 5px; }
+        .param-group input { width: 100px; }
+        /* Specific style for generate length */
+        .param-group.generate-param label { min-width: 100px; }
+        .param-group.generate-param input { width: 80px; }
+
+        button { padding: 10px 15px; cursor: pointer; margin-right: 10px; margin-bottom: 10px; background-color: #007bff; color: white; border: none; border-radius: 4px; }
+        button#predictButtonTrain { background-color: #28a745; } /* Green for predict */
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        button:hover:not(:disabled) { opacity: 0.9; }
+        #status, #predictResultTrain { margin-top: 15px; font-weight: bold; padding: 10px; border: 1px solid #eee; background-color: #f9f9f9; border-radius: 4px; word-wrap: break-word; } /* Added word-wrap */
+        #lossChartContainer { width: 100%; max-width: 600px; margin: 20px auto; }
+        .section { border: 1px solid #ccc; padding: 20px; margin-top: 20px; border-radius: 5px; background-color: #fff; }
+        .section h2 { margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 15px;}
+        progress { width: 100%; height: 20px; margin-top: 5px; }
+        .error { color: red; font-weight: bold; margin-top: 10px; } /* Original simple error class */
+        small { color: #555; font-size: 0.9em; margin-left: 5px;}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Title updated -->
+        <h1>字符序列预测模型 (A, B, C) - 多序列支持</h1>
+
+        <div class="section">
+            <h2>1. 模型训练</h2>
+            <!-- Placeholder updated -->
+            <label for="sequenceInput">输入训练序列 (只包含 A, B, C), 用空格/换行分隔:</label>
+            <textarea id="sequenceInput" placeholder="例如: ABABCABC BCBACAB CBCAAA BBBCCC (用空格或换行分隔不同的序列)"></textarea>
+             <!-- Using original charCountDiv -->
+             <div id="charCount">总字符数 (不含空格): 0</div>
+
+            <h3>训练参数</h3>
+             <div class="param-group">
+                 <label for="sequenceLength">输入序列长度 (N):</label>
+                 <input type="number" id="sequenceLength" value="10" min="2" max="50">
+                 <small>(用前 N 个字符预测下一个)</small>
+             </div>
+             <div class="param-group">
+                <label for="lstmUnits">LSTM 单元数:</label>
+                <input type="number" id="lstmUnits" value="64" min="8" step="8">
+             </div>
+             <div class="param-group">
+                 <label for="lstmLayers">LSTM 层数:</label>
+                 <input type="number" id="lstmLayers" value="1" min="1" max="3">
+              </div>
+            <div class="param-group">
+                <label for="epochs">训练轮数 (Epochs):</label>
+                <input type="number" id="epochs" value="50" min="1">
+            </div>
+            <div class="param-group">
+                <label for="batchSize">批次大小 (Batch Size):</label>
+                <input type="number" id="batchSize" value="32" min="1">
+            </div>
+            <div class="param-group">
+                <label for="learningRate">学习率:</label>
+                <input type="number" id="learningRate" value="0.01" step="0.001" min="0.0001">
+            </div>
+
+            <button id="trainButton">开始训练</button>
+            <button id="downloadButton" disabled>下载模型</button>
+            <div id="status">状态：等待输入和配置训练参数...</div>
+            <progress id="epochProgress" value="0" max="100"></progress>
+            <!-- Original simple error div -->
+            <div id="trainingError" class="error"></div>
+            <div id="lossChartContainer">
+                <canvas id="lossChart"></canvas>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>2. 使用训练好的模型 (在本页测试/生成)</h2>
+            <p>训练完成后，在此输入起始（种子）序列。长度不足或超长会自动处理以匹配模型输入长度 (<strong id="testSeqLenLabel">N/A</strong>)。</p>
+
+            <label for="predictSequenceTrain">输入起始序列 (A, B, 或 C):</label>
+            <input type="text" id="predictSequenceTrain" placeholder="训练完成后输入..." disabled>
+
+            <div class="param-group generate-param">
+                <label for="generateLengthTrain">生成序列长度:</label>
+                <!-- Default value slightly increased -->
+                <input type="number" id="generateLengthTrain" value="20" min="1" max="300" disabled>
+                <small>(连续生成多少个字符)</small>
+            </div>
+
+            <button id="predictButtonTrain" disabled>预测/生成序列</button>
+            <div id="predictResultTrain">预测结果将显示在这里。</div>
+             <!-- Original simple error div -->
+            <div id="predictErrorTrain" class="error"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- 全局变量和常量 ---
+        const charToIndex = { 'A': 0, 'B': 1, 'C': 2 };
+        const indexToChar = { 0: 'A', 1: 'B', 2: 'C' };
+        const VOCAB_SIZE = 3;
+        const PADDING_CHAR = 'A'; // 用于填充的字符
+        let model = null;
+        let lossChart = null;
+        let currentSequenceLength = 0; // 存储当前模型训练时使用的 sequenceLength
+
+        // --- DOM 元素引用 (using original IDs where they differ) ---
+        const sequenceInput = document.getElementById('sequenceInput');
+        const charCountDiv = document.getElementById('charCount'); // Original ID
+        const sequenceLengthInput = document.getElementById('sequenceLength');
+        const lstmUnitsInput = document.getElementById('lstmUnits');
+        const lstmLayersInput = document.getElementById('lstmLayers');
+        const epochsInput = document.getElementById('epochs');
+        const batchSizeInput = document.getElementById('batchSize');
+        const learningRateInput = document.getElementById('learningRate');
+        const trainButton = document.getElementById('trainButton');
+        const downloadButton = document.getElementById('downloadButton');
+        const statusDiv = document.getElementById('status');
+        const epochProgress = document.getElementById('epochProgress');
+        const trainingErrorDiv = document.getElementById('trainingError'); // Original ID
+        // --- Prediction Section Elements ---
+        const predictSequenceTrainInput = document.getElementById('predictSequenceTrain');
+        const generateLengthTrainInput = document.getElementById('generateLengthTrain');
+        const predictButtonTrain = document.getElementById('predictButtonTrain');
+        const predictResultTrainDiv = document.getElementById('predictResultTrain');
+        const predictErrorTrainDiv = document.getElementById('predictErrorTrain'); // Original ID
+        const testSeqLenLabel = document.getElementById('testSeqLenLabel');
+        const lossCanvas = document.getElementById('lossChart');
+
+        // --- 事件监听 ---
+        sequenceInput.addEventListener('input', () => {
+            // Update char count (excluding whitespace)
+            const text = sequenceInput.value;
+            const totalChars = text.replace(/\s/g, '').length;
+            charCountDiv.textContent = `总字符数 (不含空格): ${totalChars}`;
+        });
+
+        trainButton.addEventListener('click', handleTrain);
+        downloadButton.addEventListener('click', handleDownload);
+        predictButtonTrain.addEventListener('click', handlePredictGenerateTrain);
+
+        // --- 功能函数 ---
+
+        // 更新状态显示 (Original simple version)
+        function updateStatus(message, isError = false) {
+            statusDiv.textContent = `状态：${message}`;
+            statusDiv.style.color = isError ? 'red' : 'black';
+            if (isError) console.error(message);
+        }
+
+        // 更新错误显示 (Original simple version - updates textContent)
+        function displayError(element, message) {
+            element.textContent = message || ''; // Set text or clear if message is empty/null
+        }
+
+        // 清除错误显示 (Original simple version)
+        function clearErrors() {
+            trainingErrorDiv.textContent = '';
+            predictErrorTrainDiv.textContent = '';
+        }
+
+        // 验证单个训练序列段 (Needed for multi-sequence logic)
+        function validateSingleSequence(sequence, index, seqLength) {
+            if (!sequence) return `序列段 ${index + 1} 不能为空。`;
+            const allowedChars = new Set(Object.keys(charToIndex));
+            for (let i = 0; i < sequence.length; i++) {
+                if (!allowedChars.has(sequence[i])) {
+                    return `序列段 ${index + 1} 在位置 ${i} 包含无效字符 '${sequence[i]}'。只允许 A, B, C。`;
+                }
+            }
+            // Crucial check: sequence length MUST be greater than seqLength to form at least one training pair
+            if (sequence.length <= seqLength) {
+                 return `序列段 ${index + 1} (长度 ${sequence.length}) 必须大于设置的输入序列长度 (${seqLength})。`;
+            }
+            return null; // No error
+        }
+
+        // 验证预测/生成输入的字符 (Needed for prediction logic)
+        function validateSequenceCharsTrain(sequence) {
+             const allowedChars = new Set(Object.keys(charToIndex));
+             for (let i = 0; i < sequence.length; i++) {
+                 if (!allowedChars.has(sequence[i])) {
+                     return `起始序列在位置 ${i} 包含无效字符 '${sequence[i]}'。只允许 A, B, C。`;
+                 }
+             }
+             return null; // No error
+         }
+
+
+        // 准备数据：将多个序列切分成 Input/Target 对 (Logic from multi-sequence version)
+        function preprocessData(sequencesArray, seqLength) {
+            const allInputSubSequences = [];
+            const allNextChars = [];
+
+            if (!sequencesArray || sequencesArray.length === 0) {
+                 throw new Error("没有提供有效的训练序列段。");
+            }
+
+            let totalSamplesGenerated = 0;
+            for (const sequence of sequencesArray) {
+                 // This check should be redundant due to prior validation, but good safety measure
+                 if (sequence.length <= seqLength) {
+                    console.warn(`Skipping sequence "${sequence}" during preprocessing (length ${sequence.length} <= seqLength ${seqLength}).`);
+                    continue;
+                 }
+                 let samplesFromThisSequence = 0;
+                 for (let i = 0; i < sequence.length - seqLength; i++) {
+                    allInputSubSequences.push(sequence.substring(i, i + seqLength));
+                    allNextChars.push(sequence[i + seqLength]);
+                    samplesFromThisSequence++;
+                 }
+                 // console.log(`Generated ${samplesFromThisSequence} samples from sequence segment of length ${sequence.length}`);
+                 totalSamplesGenerated += samplesFromThisSequence;
+            }
+
+            if (allInputSubSequences.length === 0) { // or totalSamplesGenerated === 0
+                 throw new Error(`所有提供的序列段都太短或无效，无法生成任何训练样本 (需要长度 > ${seqLength})。`);
+            }
+
+            console.log(`从 ${sequencesArray.length} 个有效输入序列段共生成了 ${totalSamplesGenerated} 个训练样本。`);
+
+            // Create Tensors
+            return tf.tidy(() => {
+                const xs = tf.tensor3d(
+                    allInputSubSequences.map(seq =>
+                        seq.split('').map(char => tf.oneHot(charToIndex[char], VOCAB_SIZE).arraySync())
+                    ),
+                    [allInputSubSequences.length, seqLength, VOCAB_SIZE]
+                );
+                const ys = tf.tensor2d(
+                    allNextChars.map(char => tf.oneHot(charToIndex[char], VOCAB_SIZE).arraySync()),
+                    [allNextChars.length, VOCAB_SIZE]
+                );
+                console.log("Tensor shapes:", xs.shape, ys.shape);
+                return { xs, ys };
+            });
+        }
+
+        // 构建 LSTM 模型 (No changes needed from original/multi-sequence)
+        function buildModel(seqLength, lstmUnits, lstmLayers) {
+            const model = tf.sequential();
+            for(let i = 0; i < lstmLayers; i++) {
+                model.add(tf.layers.lstm({
+                    units: lstmUnits,
+                    inputShape: (i === 0) ? [seqLength, VOCAB_SIZE] : undefined,
+                    returnSequences: (i < lstmLayers - 1)
+                }));
+            }
+            model.add(tf.layers.dense({ units: VOCAB_SIZE, activation: 'softmax' }));
+            model.summary();
+            return model;
+        }
+
+        // 初始化或更新损失图表 (No changes needed from original/multi-sequence)
+        function setupLossChart() {
+            const ctx = lossCanvas.getContext('2d');
+            if (lossChart) { lossChart.destroy(); }
+            lossChart = new Chart(ctx, {
+                type: 'line',
+                data: { labels: [], datasets: [{ label: '训练损失 (Loss)', borderColor: 'rgb(75, 192, 192)', data: [], tension: 0.1 }] },
+                options: { scales: { y: { beginAtZero: true, title: { display: true, text: '损失值'} } }, responsive: true, plugins: { title: { display: true, text: '模型训练损失曲线' } } }
+            });
+        }
+
+        // 更新图表数据 (No changes needed from original/multi-sequence)
+        function updateChart(epoch, loss) {
+            if (!lossChart) setupLossChart();
+            lossChart.data.labels.push(epoch);
+            lossChart.data.datasets[0].data.push(loss);
+            lossChart.update('none');
+        }
+
+        // --- 训练 (Incorporating multi-sequence logic) ---
+        async function handleTrain() {
+            clearErrors(); // Use original clearErrors
+            trainButton.disabled = true;
+            downloadButton.disabled = true;
+            predictSequenceTrainInput.disabled = true;
+            generateLengthTrainInput.disabled = true;
+            predictButtonTrain.disabled = true;
+            updateStatus("开始训练准备...");
+            epochProgress.value = 0;
+            if (lossChart) lossChart.destroy();
+            lossChart = null;
+
+            // 1. Get Input Parameters
+            const rawText = sequenceInput.value.trim();
+            const seqLength = parseInt(sequenceLengthInput.value);
+            const lstmUnits = parseInt(lstmUnitsInput.value);
+            const lstmLayers = parseInt(lstmLayersInput.value);
+            const epochs = parseInt(epochsInput.value);
+            const batchSize = parseInt(batchSizeInput.value);
+            const learningRate = parseFloat(learningRateInput.value);
+
+             // 2. Validate Parameters
+             if (isNaN(seqLength) || seqLength < 2 || isNaN(lstmUnits) || lstmUnits < 8 || isNaN(lstmLayers) || lstmLayers < 1 || isNaN(epochs) || epochs < 1 || isNaN(batchSize) || batchSize < 1 || isNaN(learningRate) || learningRate <= 0) {
+                 const msg = "请确保所有训练参数都是有效的正数。";
+                 updateStatus(`错误: ${msg}`, true);
+                 displayError(trainingErrorDiv, msg); // Use original displayError
+                 trainButton.disabled = false; // Re-enable button
+                 return;
+             }
+
+            // 3. Split and Validate Input Sequences
+            // Split by any whitespace (space, tab, newline) and filter out empty strings
+            const sequencesArray = rawText.split(/\s+/).filter(s => s.length > 0).map(s => s.toUpperCase());
+
+            if (sequencesArray.length === 0) {
+                const msg = "未提供有效的训练序列。请在文本框中输入至少一个序列。";
+                updateStatus(`错误: ${msg}`, true);
+                displayError(trainingErrorDiv, msg);
+                trainButton.disabled = false;
+                return;
+            }
+
+            // Validate each sequence segment individually
+            const validSequences = [];
+            for (let i = 0; i < sequencesArray.length; i++) {
+                const validationError = validateSingleSequence(sequencesArray[i], i, seqLength);
+                if (validationError) {
+                    updateStatus(`输入错误: ${validationError}`, true);
+                    displayError(trainingErrorDiv, validationError);
+                    trainButton.disabled = false;
+                    return; // Stop training if any segment is invalid
+                }
+                validSequences.push(sequencesArray[i]); // Add if valid
+            }
+            // This check is technically redundant if validateSingleSequence works, but safe
+            if (validSequences.length === 0) {
+                 const msg = `所有提供的序列段长度都小于或等于输入序列长度 (${seqLength})，无法进行训练。`;
+                 updateStatus(`错误: ${msg}`, true);
+                 displayError(trainingErrorDiv, msg);
+                 trainButton.disabled = false;
+                 return;
+            }
+
+
+            // Store sequence length for prediction/generation
+            currentSequenceLength = seqLength;
+            testSeqLenLabel.textContent = seqLength; // Update label in prediction section
+            predictSequenceTrainInput.placeholder = `需要 ${seqLength} 位输入 (会自动处理)`;
+
+
+            try {
+                updateStatus("正在预处理数据...");
+                await tf.nextFrame();
+                // Pass only the sequences that passed validation
+                const { xs, ys } = preprocessData(validSequences, seqLength);
+
+                updateStatus(`数据处理完成。准备构建模型 (序列长度=${seqLength}, LSTM单元=${lstmUnits}x${lstmLayers}层)。`);
+                await tf.nextFrame();
+                 if (model) {
+                    tf.dispose(model); // Dispose previous model
+                    console.log("Disposed previous model.");
+                 }
+                model = buildModel(seqLength, lstmUnits, lstmLayers);
+
+                model.compile({
+                    optimizer: tf.train.adam(learningRate),
+                    loss: 'categoricalCrossentropy',
+                    metrics: ['accuracy'] // Request accuracy metric
+                });
+
+                updateStatus("开始模型训练...");
+                setupLossChart();
+
+                const history = await model.fit(xs, ys, {
+                    epochs: epochs,
+                    batchSize: batchSize,
+                    shuffle: true, // Shuffle data each epoch
+                    callbacks: {
+                        onEpochEnd: async (epoch, logs) => {
+                            const progress = ((epoch + 1) / epochs) * 100;
+                            epochProgress.value = progress;
+                            const accString = logs.acc ? logs.acc.toFixed(4) : 'N/A';
+                            const lossString = logs.loss ? logs.loss.toFixed(4) : 'N/A';
+                            updateStatus(`训练中... Epoch ${epoch + 1}/${epochs} - Loss: ${lossString}, Acc: ${accString}`);
+                            if (logs.loss != null) {
+                                updateChart(epoch + 1, logs.loss);
+                            }
+                            console.log(`Epoch ${epoch + 1}: loss = ${logs.loss}, acc = ${logs.acc}`);
+                            await tf.nextFrame(); // Yield to allow UI updates
+                        }
+                    }
+                });
+
+                updateStatus("训练完成！模型已准备好。");
+                xs.dispose();
+                ys.dispose();
+                console.log("训练数据张量已释放。");
+
+                // Enable download and prediction/generation controls
+                downloadButton.disabled = false;
+                predictSequenceTrainInput.disabled = false;
+                generateLengthTrainInput.disabled = false;
+                predictButtonTrain.disabled = false;
+                 // Update placeholder again, confirming the length used
+                predictSequenceTrainInput.placeholder = `输入起始序列 (模型需要 ${currentSequenceLength} 位输入)`;
+
+            } catch (error) {
+                const errMsg = `训练过程中发生错误: ${error.message}`;
+                updateStatus(errMsg, true);
+                displayError(trainingErrorDiv, `${errMsg}. 检查控制台获取更多信息.`); // Use original displayError
+                console.error("训练错误:", error);
+                // Ensure train button is re-enabled on error
+                trainButton.disabled = false;
+            }
+        }
+
+        // --- 下载 --- (No changes needed)
+        async function handleDownload() {
+            if (!model) {
+                updateStatus("错误：模型尚未训练。", true);
+                displayError(trainingErrorDiv, "模型未训练，无法下载。"); // Use original displayError
+                return;
+            }
+            try {
+                updateStatus("正在准备下载模型文件...");
+                await model.save('downloads://trained-abc-multi-seq-model'); // Using the multi-seq name
+                updateStatus("模型文件已开始下载 (model.json 和 weights.bin)。");
+            } catch (error) {
+                const errMsg = `下载模型时出错: ${error.message}`;
+                updateStatus(errMsg, true);
+                displayError(trainingErrorDiv, `下载失败: ${errMsg}`); // Use original displayError
+                console.error("下载错误:", error);
+            }
+        }
+
+        // --- 预测/生成 (在本页) ---
+
+        // 准备用于模型预测的输入序列 (No changes needed from multi-sequence logic)
+        function prepareInputSequenceTrain(rawInput) {
+            if (currentSequenceLength <= 0) throw new Error("模型未训练或序列长度无效。");
+            let sequence = rawInput.trim().toUpperCase();
+
+            // Validate characters *before* padding/truncating
+            const charValidationError = validateSequenceCharsTrain(sequence);
+            if (charValidationError) {
+                throw new Error(charValidationError); // Propagate validation error
+            }
+
+            if (sequence.length < currentSequenceLength) {
+                const paddingNeeded = currentSequenceLength - sequence.length;
+                const padding = PADDING_CHAR.repeat(paddingNeeded);
+                console.log(`Input too short (${sequence.length}). Padding with ${paddingNeeded} '${PADDING_CHAR}' chars.`);
+                return padding + sequence; // Pad at the beginning
+            } else if (sequence.length > currentSequenceLength) {
+                const start = sequence.length - currentSequenceLength;
+                console.log(`Input too long (${sequence.length}). Using last ${currentSequenceLength} chars.`);
+                return sequence.slice(start); // Use the end of the sequence
+            } else {
+                return sequence; // Length is correct
+            }
+        }
+
+        // 预测下一个字符 (No changes needed from multi-sequence logic)
+         function predictNextChar(inputSequence) {
+             if (!model) throw new Error("模型未训练或未定义。");
+             if (inputSequence.length !== currentSequenceLength) {
+                 // This should ideally not happen if prepareInputSequenceTrain is used correctly
+                 throw new Error(`内部错误：predictNextChar接收到的序列长度 (${inputSequence.length}) 与模型要求的长度 (${currentSequenceLength}) 不匹配。`);
+             }
+
+             return tf.tidy(() => {
+                 const inputTensor = tf.tensor3d(
+                     [inputSequence.split('').map(char => tf.oneHot(charToIndex[char], VOCAB_SIZE).arraySync())],
+                     [1, currentSequenceLength, VOCAB_SIZE] // Batch size of 1
+                 );
+                 const prediction = model.predict(inputTensor); // Shape: [1, VOCAB_SIZE]
+                 // Get the index of the highest probability
+                 // Squeeze removes the batch dimension (shape [1, VOCAB_SIZE] -> [VOCAB_SIZE])
+                 const predictedIndex = tf.argMax(prediction.squeeze(), axis=0).dataSync()[0];
+                 // Dispose tensors explicitly within tidy
+                 // inputTensor.dispose(); // Done automatically by tidy
+                 // prediction.dispose(); // Done automatically by tidy
+                 return indexToChar[predictedIndex];
+             });
+         }
+
+
+        // 处理预测/生成请求 (在本页) (No changes needed from multi-sequence logic)
+        async function handlePredictGenerateTrain() {
+             clearErrors(); // Use original clearErrors
+             predictButtonTrain.disabled = true;
+             predictResultTrainDiv.textContent = "处理中...";
+
+             const rawSeedSequence = predictSequenceTrainInput.value;
+             const generateLength = parseInt(generateLengthTrainInput.value);
+
+             // --- Input Validation ---
+             if (!model || currentSequenceLength <= 0) {
+                 const msg = "错误：模型尚未成功训练或已失效。请先训练模型。";
+                 predictResultTrainDiv.textContent = msg;
+                 displayError(predictErrorTrainDiv, msg); // Use original displayError
+                 predictButtonTrain.disabled = false;
+                 return;
+             }
+
+             if (isNaN(generateLength) || generateLength < 1) {
+                 const msg = "请输入有效的生成序列长度（大于0的整数）。";
+                 predictResultTrainDiv.textContent = `错误: ${msg}`;
+                 displayError(predictErrorTrainDiv, msg); // Use original displayError
+                 predictButtonTrain.disabled = false;
+                 return;
+             }
+             // Character validation is now part of prepareInputSequenceTrain
+
+             try {
+                 predictResultTrainDiv.textContent = `准备起始序列...`;
+                 await tf.nextFrame();
+
+                 // prepareInputSequenceTrain handles length adjustment AND char validation now
+                 let currentInputSequence = prepareInputSequenceTrain(rawSeedSequence);
+                 let generatedSequence = "";
+                 const initialSeedProcessed = currentInputSequence; // Store the processed seed for display
+
+                 predictResultTrainDiv.textContent = `使用种子: "${initialSeedProcessed}" (长度 ${currentInputSequence.length})\n生成中 (0/${generateLength})...`;
+                 await tf.nextFrame(); // UI update
+
+                 for (let i = 0; i < generateLength; i++) {
+                     const nextChar = predictNextChar(currentInputSequence);
+                     generatedSequence += nextChar;
+                     currentInputSequence = currentInputSequence.slice(1) + nextChar; // Slide window
+
+                     // Update UI periodically
+                     if ((i + 1) % 10 === 0 || i === generateLength - 1) {
+                         // Show tail end for longer sequences to prevent overflow
+                         const displayGenerated = generatedSequence.length > 100 ? `...${generatedSequence.slice(-100)}` : generatedSequence;
+                         predictResultTrainDiv.textContent = `使用种子: "${initialSeedProcessed}"\n生成中 (${i + 1}/${generateLength}): ${displayGenerated}`;
+                         await tf.nextFrame();
+                     }
+                 }
+
+                 // Final Result Display with clearer separation
+                 predictResultTrainDiv.textContent = `起始序列 (处理后): "${initialSeedProcessed}"\n---\n生成的 ${generateLength} 个字符:\n${generatedSequence}`;
+                 updateStatus("序列生成完成！");
+
+             } catch (error) {
+                 const errMsg = `生成时发生错误: ${error.message}`;
+                 predictResultTrainDiv.textContent = errMsg; // Show error in result area
+                 displayError(predictErrorTrainDiv, `${errMsg}. 检查控制台.`); // Use original displayError
+                 console.error("生成/预测错误 (Train Page):", error);
+                 updateStatus(errMsg, true); // Update main status
+             } finally {
+                  predictButtonTrain.disabled = false; // Re-enable button
+             }
+        }
+
+        // Initial setup
+        sequenceInput.dispatchEvent(new Event('input')); // Trigger initial char count update
+        setupLossChart(); // Initial chart setup
+
+    </script>
+</body>
+</html>
