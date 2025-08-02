@@ -1,0 +1,1173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>国际象棋游戏</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 { color: #333; margin-bottom: 20px; }
+        #game-container {
+            display: flex; flex-direction: column; align-items: center;
+            background-color: white; padding: 20px; border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        #chessboard {
+            display: grid; grid-template-columns: repeat(8, 60px);
+            grid-template-rows: repeat(8, 60px);
+            border: 2px solid #333; margin-bottom: 20px;
+        }
+        .square {
+            width: 60px; height: 60px; display: flex; justify-content: center; align-items: center;
+            font-size: 40px; cursor: pointer; position: relative;
+        }
+        .square.light { background-color: #f0d9b5; }
+        .square.dark { background-color: #b58863; }
+        .square.selected { background-color: #7fb069 !important; }
+        .square.possible-move { position: relative; }
+        .square.possible-move::after {
+            content: ''; position: absolute; width: 20px; height: 20px;
+            background-color: rgba(0,0,0,0.3); border-radius: 50%;
+        }
+        .square.possible-capture::after {
+            content: ''; position: absolute; width: 56px; height: 56px;
+            border: 3px solid rgba(255,0,0,0.5); border-radius: 50%;
+        }
+        #game-info { display: flex; flex-direction: column; align-items: center; width: 100%; max-width: 500px; }
+        #status { font-size: 18px; margin-bottom: 15px; font-weight: bold; }
+        #controls { display: flex; justify-content: space-between; width: 100%; margin-bottom: 15px; }
+        button {
+            padding: 8px 16px; background-color: #4a6fa5; color: white; border: none; border-radius: 4px;
+            cursor: pointer; font-size: 14px; transition: background-color 0.3s;
+        }
+        button:hover { background-color: #3a5a8a; }
+        #difficulty-container { display: flex; align-items: center; width: 100%; margin-bottom: 15px; }
+        #difficulty-slider { flex-grow: 1; margin: 0 10px; }
+        #thinking-indicator { display: none; color: #d9534f; font-weight: bold; margin-top: 10px; }
+        .piece { user-select: none; }
+    </style>
+</head>
+<body>
+    <h1>国际象棋游戏</h1>
+    <div id="game-container">
+        <div id="chessboard"></div>
+        <div id="game-info">
+            <div id="status">白方回合</div>
+            <div id="controls">
+                <button id="new-game-btn">新游戏</button>
+                <button id="undo-btn">悔棋</button>
+            </div>
+            <div id="difficulty-container">
+                <span>难度:</span>
+                <input type="range" id="difficulty-slider" min="1" max="6" value="3">
+                <span id="difficulty-value">3</span>
+            </div>
+            <div id="thinking-indicator">AI思考中...</div>
+        </div>
+    </div>
+
+    <script>
+        // ===== 棋子Unicode符号 =====
+        const PIECES = {
+            'white-king': '♔','white-queen': '♕','white-rook': '♖','white-bishop': '♗','white-knight': '♘','white-pawn': '♙',
+            'black-king': '♚','black-queen': '♛','black-rook': '♜','black-bishop': '♝','black-knight': '♞','black-pawn': '♟'
+        };
+
+        // ===== 游戏状态 =====
+        let board = [];
+        let currentPlayer = 'white';
+        let selectedSquare = null;
+        let possibleMoves = [];
+        let gameHistory = [];
+        let moveCount = 0;
+        let capturedPieces = { white: [], black: [] };
+        let kingPositions = { white: { row: 7, col: 4 }, black: { row: 0, col: 4 } };
+        let castlingRights = {
+            white: { kingSide: true, queenSide: true },
+            black: { kingSide: true, queenSide: true }
+        };
+        let enPassantTarget = null;
+        let aiThinking = false;
+        let maxDepth = 3;
+        let searchStartTime = 0;
+        let searchTimeout = null;
+
+        // ======== 评估相关：分阶段PST、兵结构、机动性、王安全等 ========
+        // 基础子力分（用于总体材料分；王的分只用于残局阶段PST，不计入材料）
+        const PIECE_VALUES = { pawn: 100, knight: 320, bishop: 330, rook: 500, queen: 900, king: 0 };
+
+        // 分阶段权重（用于计算“阶段”）
+        // 常见做法：N=1, B=1, R=2, Q=4，共24分；用于 mg/eg 插值
+        const PHASE_WEIGHTS = { pawn: 0, knight: 1, bishop: 1, rook: 2, queen: 4, king: 0 };
+        const TOTAL_PHASE = 24;
+
+        // 开中局/残局 PST（白方视角，黑方取镜像）
+        // 这些表是简化版、数值经过平滑处理，避免过强的风格偏置
+        const PST_MG = {
+            pawn: [
+                [0, 0, 0, 0, 0, 0, 0, 0],
+                [50, 50, 50, 50, 50, 50, 50, 50],
+                [10, 10, 20, 30, 30, 20, 10, 10],
+                [5, 5, 10, 25, 25, 10, 5, 5],
+                [0, 0, 0, 20, 20, 0, 0, 0],
+                [5,-5,-10, 0, 0,-10,-5, 5],
+                [5,10,10,-20,-20,10,10, 5],
+                [0, 0, 0, 0, 0, 0, 0, 0]
+            ],
+            knight: [
+                [-50,-40,-30,-30,-30,-30,-40,-50],
+                [-40,-20, 0, 0, 0, 0,-20,-40],
+                [-30, 0,10,15,15,10, 0,-30],
+                [-30, 5,15,20,20,15, 5,-30],
+                [-30, 0,15,20,20,15, 0,-30],
+                [-30, 5,10,15,15,10, 5,-30],
+                [-40,-20, 0, 5, 5, 0,-20,-40],
+                [-50,-40,-30,-30,-30,-30,-40,-50]
+            ],
+            bishop: [
+                [-20,-10,-10,-10,-10,-10,-10,-20],
+                [-10, 0, 0, 0, 0, 0, 0,-10],
+                [-10, 0, 5,10,10, 5, 0,-10],
+                [-10, 5, 5,10,10, 5, 5,-10],
+                [-10, 0,10,10,10,10, 0,-10],
+                [-10,10,10,10,10,10,10,-10],
+                [-10, 5, 0, 0, 0, 0, 5,-10],
+                [-20,-10,-10,-10,-10,-10,-10,-20]
+            ],
+            rook: [
+                [0, 0, 0, 5, 5, 0, 0, 0],
+                [-5, 0, 0, 0, 0, 0, 0,-5],
+                [-5, 0, 0, 0, 0, 0, 0,-5],
+                [-5, 0, 0, 0, 0, 0, 0,-5],
+                [-5, 0, 0, 0, 0, 0, 0,-5],
+                [-5, 0, 0, 0, 0, 0, 0,-5],
+                [5,10,10,10,10,10,10, 5],
+                [0, 0, 0, 0, 0, 0, 0, 0]
+            ],
+            queen: [
+                [-20,-10,-10,-5,-5,-10,-10,-20],
+                [-10, 0, 0, 0, 0, 0, 0,-10],
+                [-10, 0, 5, 5, 5, 5, 0,-10],
+                [-5, 0, 5, 5, 5, 5, 0, -5],
+                [0, 0, 5, 5, 5, 5, 0, -5],
+                [-10, 5, 5, 5, 5, 5, 0,-10],
+                [-10, 0, 5, 0, 0, 0, 0,-10],
+                [-20,-10,-10,-5,-5,-10,-10,-20]
+            ],
+            king: [
+                [-30,-40,-40,-50,-50,-40,-40,-30],
+                [-30,-40,-40,-50,-50,-40,-40,-30],
+                [-30,-40,-40,-50,-50,-40,-40,-30],
+                [-30,-40,-40,-50,-50,-40,-40,-30],
+                [-20,-30,-30,-40,-40,-30,-30,-20],
+                [-10,-20,-20,-20,-20,-20,-20,-10],
+                [20, 20, 0, 0, 0, 0, 20, 20],
+                [20, 30, 10, 0, 0, 10, 30, 20]
+            ]
+        };
+
+        const PST_EG = {
+            pawn: [
+                [0, 0, 0, 0, 0, 0, 0, 0],
+                [50, 50, 50, 50, 50, 50, 50, 50],
+                [25, 25, 30, 35, 35, 30, 25, 25],
+                [10, 10, 15, 25, 25, 15, 10, 10],
+                [5, 5, 10, 20, 20, 10, 5, 5],
+                [0, 0, 5, 15, 15, 5, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0]
+            ],
+            knight: [
+                [-40,-20,-10,-10,-10,-10,-20,-40],
+                [-20, 0, 5, 5, 5, 5, 0,-20],
+                [-10, 5,10,15,15,10, 5,-10],
+                [-10, 5,15,20,20,15, 5,-10],
+                [-10, 5,15,20,20,15, 5,-10],
+                [-10, 5,10,15,15,10, 5,-10],
+                [-20, 0, 5, 5, 5, 5, 0,-20],
+                [-40,-20,-10,-10,-10,-10,-20,-40]
+            ],
+            bishop: [
+                [-20,-10,-10,-10,-10,-10,-10,-20],
+                [-10, 0, 0, 0, 0, 0, 0,-10],
+                [-10, 0,10,15,15,10, 0,-10],
+                [-10,10,15,20,20,15,10,-10],
+                [-10, 0,15,20,20,15, 0,-10],
+                [-10,10,10,15,15,10,10,-10],
+                [-10, 0, 0, 0, 0, 0, 0,-10],
+                [-20,-10,-10,-10,-10,-10,-10,-20]
+            ],
+            rook: [
+                [0, 0, 0, 10, 10, 0, 0, 0],
+                [0, 0, 0, 10, 10, 0, 0, 0],
+                [0, 0, 0, 10, 10, 0, 0, 0],
+                [5, 5, 5, 15, 15, 5, 5, 5],
+                [5, 5, 5, 15, 15, 5, 5, 5],
+                [0, 0, 0, 10, 10, 0, 0, 0],
+                [0, 0, 0, 10, 10, 0, 0, 0],
+                [0, 0, 0, 10, 10, 0, 0, 0]
+            ],
+            queen: [
+                [-20,-10,-10,-5,-5,-10,-10,-20],
+                [-10, 0, 0, 0, 0, 0, 0,-10],
+                [-10, 0,10,10,10,10, 0,-10],
+                [-5, 0,10,15,15,10, 0, -5],
+                [-5, 0,10,15,15,10, 0, -5],
+                [-10, 0,10,10,10,10, 0,-10],
+                [-10, 0, 0, 0, 0, 0, 0,-10],
+                [-20,-10,-10,-5,-5,-10,-10,-20]
+            ],
+            king: [
+                [-50,-30,-10, 0, 0,-10,-30,-50],
+                [-30,-10, 20,30,30, 20,-10,-30],
+                [-10, 20, 30,40,40, 30, 20,-10],
+                [0, 30, 40,50,50, 40, 30, 0],
+                [0, 30, 40,50,50, 40, 30, 0],
+                [-10, 20, 30,40,40, 30, 20,-10],
+                [-30,-10, 20,30,30, 20,-10,-30],
+                [-50,-30,-10, 0, 0,-10,-30,-50]
+            ]
+        };
+
+        function pstValue(pst, row, col, player) {
+            // PST按白方视角存储：白子用 [7-row]，黑子用 [row]
+            return player === 'white' ? pst[7 - row][col] : pst[row][col];
+        }
+
+        function countPhasePiece(piece) {
+            const t = piece.split('-')[1];
+            return PHASE_WEIGHTS[t] || 0;
+        }
+
+        function isPawn(piece){ return piece && piece.endsWith('pawn'); }
+        function isRook(piece){ return piece && piece.endsWith('rook'); }
+        function isBishop(piece){ return piece && piece.endsWith('bishop'); }
+
+        // 机动性：使用“非易位的攻击步”近似（快且稳定）
+        function getPseudoMobility(board, player) {
+            let mob = 0;
+            for (let r=0;r<8;r++){
+                for (let c=0;c<8;c++){
+                    const p = board[r][c];
+                    if (p && p.startsWith(player)) {
+                        const moves = generatePieceMovesWithoutCastlingForBoard(board, {row:r,col:c});
+                        mob += moves.length;
+                    }
+                }
+            }
+            return mob;
+        }
+
+        // 兵结构评分（成双兵/孤兵/通路兵）
+        function pawnStructureScore(board, player) {
+            let score = 0;
+            const dir = player === 'white' ? -1 : 1;
+            // 每列统计兵
+            for (let file=0; file<8; file++){
+                let rowsOwn = [];
+                let hasOppOnFile = false;
+                for (let row=0; row<8; row++){
+                    const p = board[row][file];
+                    if (p){
+                        if (p === `${player}-pawn`) rowsOwn.push(row);
+                        if (p === `${(player==='white'?'black':'white')}-pawn`) hasOppOnFile = true;
+                    }
+                }
+                // 成双/三兵
+                if (rowsOwn.length >= 2) {
+                    // 每多一个罚 15
+                    score -= (rowsOwn.length - 1) * 15;
+                }
+                // 孤兵：相邻列无己兵
+                const hasLeft = file>0 && columnHasOwnPawn(board, file-1, player);
+                const hasRight = file<7 && columnHasOwnPawn(board, file+1, player);
+                if (rowsOwn.length>0 && !hasLeft && !hasRight) {
+                    score -= 20;
+                }
+                // 通路兵：前方同列/邻列无对方兵
+                for (const rr of rowsOwn){
+                    if (isPassedPawn(board, rr, file, player, dir)) {
+                        // 按离升变距离给奖励
+                        const dist = player==='white' ? rr : 7-rr;
+                        score += 30 + (6 - dist) * 5;
+                    }
+                }
+            }
+            return score;
+        }
+        function columnHasOwnPawn(board, file, player){
+            for (let r=0;r<8;r++){
+                const p=board[r][file];
+                if (p === `${player}-pawn`) return true;
+            }
+            return false;
+        }
+        function isPassedPawn(board, row, col, player, dir){
+            const opp = player==='white'?'black':'white';
+            // 同列与相邻列在兵前进方向上无对方兵
+            for (let dc=-1; dc<=1; dc++){
+                const c = col + dc;
+                if (c<0 || c>7) continue;
+                for (let r=row+dir; r>=0 && r<8; r+=dir){
+                    if (board[r][c] === `${opp}-pawn`) return false;
+                }
+            }
+            return true;
+        }
+
+        // 车开放线/半开放线
+        function rookFileScore(board, player) {
+            let s = 0;
+            for (let c=0;c<8;c++){
+                let ownP=0, oppP=0, hasR=false;
+                for (let r=0;r<8;r++){
+                    const p=board[r][c];
+                    if (p){
+                        if (p === `${player}-pawn`) ownP++;
+                        else if (p === `${(player==='white'?'black':'white')}-pawn`) oppP++;
+                        if (p === `${player}-rook`) hasR = true;
+                    }
+                }
+                if (hasR){
+                    if (ownP===0 && oppP===0) s += 20;          // 开放线
+                    else if (ownP===0 && oppP>0) s += 10;       // 半开放线
+                }
+            }
+            return s;
+        }
+
+        // 王安全：简单兵盾 + 未易位/中心罚分
+        function kingSafetyScore(board, player) {
+            const k = findKingForBoard(board, player);
+            if (!k) return 0;
+            const dir = player==='white' ? -1 : 1;
+            let shield = 0;
+            // 计算王前两排相邻三列的己方兵数量
+            for (let dc=-1; dc<=1; dc++){
+                for (let step=1; step<=2; step++){
+                    const r = k.row + dir*step;
+                    const c = k.col + dc;
+                    if (r>=0 && r<8 && c>=0 && c<8){
+                        if (board[r][c] === `${player}-pawn`) shield++;
+                    }
+                }
+            }
+            let s = shield*7;
+            // 王在中心位置的罚分（开中局）
+            if (k.row>=3 && k.row<=4 && k.col>=3 && k.col<=4) s -= 15;
+            return s;
+        }
+
+        // 双象奖励
+        function bishopPairScore(board, player){
+            let cnt=0;
+            for (let r=0;r<8;r++){
+                for (let c=0;c<8;c++){
+                    if (board[r][c] === `${player}-bishop`) cnt++;
+                }
+            }
+            return cnt>=2 ? 25 : 0;
+        }
+
+        // ===== 初始化棋盘 =====
+        function initializeBoard() {
+            board = [
+                ['black-rook','black-knight','black-bishop','black-queen','black-king','black-bishop','black-knight','black-rook'],
+                ['black-pawn','black-pawn','black-pawn','black-pawn','black-pawn','black-pawn','black-pawn','black-pawn'],
+                [null,null,null,null,null,null,null,null],
+                [null,null,null,null,null,null,null,null],
+                [null,null,null,null,null,null,null,null],
+                [null,null,null,null,null,null,null,null],
+                ['white-pawn','white-pawn','white-pawn','white-pawn','white-pawn','white-pawn','white-pawn','white-pawn'],
+                ['white-rook','white-knight','white-bishop','white-queen','white-king','white-bishop','white-knight','white-rook']
+            ];
+            currentPlayer = 'white';
+            selectedSquare = null; possibleMoves = []; gameHistory = [];
+            moveCount = 0; capturedPieces = {white:[], black:[]};
+            kingPositions = { white: { row: 7, col: 4 }, black: { row: 0, col: 4 } };
+            castlingRights = {
+                white: { kingSide: true, queenSide: true },
+                black: { kingSide: true, queenSide: true }
+            };
+            enPassantTarget = null; aiThinking = false;
+            renderBoard(); updateStatus();
+        }
+
+        // ===== 渲染、交互（与原版一致） =====
+        function renderBoard() {
+            const chessboard = document.getElementById('chessboard');
+            chessboard.innerHTML = '';
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const square = document.createElement('div');
+                    square.classList.add('square');
+                    square.classList.add((row + col) % 2 === 0 ? 'light' : 'dark');
+                    square.dataset.row = row; square.dataset.col = col;
+                    if (board[row][col]) {
+                        const piece = document.createElement('span');
+                        piece.classList.add('piece');
+                        piece.textContent = PIECES[board[row][col]];
+                        square.appendChild(piece);
+                    }
+                    if (selectedSquare && selectedSquare.row === row && selectedSquare.col === col) {
+                        square.classList.add('selected');
+                    }
+                    const isPossibleMove = possibleMoves.some(move => move.to.row === row && move.to.col === col);
+                    if (isPossibleMove) {
+                        if (board[row][col]) square.classList.add('possible-capture');
+                        else square.classList.add('possible-move');
+                    }
+                    square.addEventListener('click', () => handleSquareClick(row, col));
+                    chessboard.appendChild(square);
+                }
+            }
+        }
+
+        function handleSquareClick(row, col) {
+            if (aiThinking) return;
+            if (selectedSquare) {
+                const move = possibleMoves.find(m => m.to.row === row && m.to.col === col);
+                if (move) { makeMove(move); return; }
+            }
+            if (board[row][col] && board[row][col].startsWith(currentPlayer)) {
+                selectedSquare = { row, col };
+                possibleMoves = generatePossibleMoves(row, col);
+                renderBoard();
+            } else {
+                selectedSquare = null; possibleMoves = []; renderBoard();
+            }
+        }
+
+        function generatePossibleMoves(row, col) {
+            const piece = board[row][col];
+            if (!piece) return [];
+            const moves = [];
+            const pieceType = piece.split('-')[1];
+            switch (pieceType) {
+                case 'pawn':   generatePawnMoves(row, col, moves); break;
+                case 'rook':   generateRookMoves(row, col, moves); break;
+                case 'knight': generateKnightMoves(row, col, moves); break;
+                case 'bishop': generateBishopMoves(row, col, moves); break;
+                case 'queen':  generateQueenMoves(row, col, moves); break;
+                case 'king':   generateKingMoves(row, col, moves); break;
+            }
+            // 过滤自杀步
+            return moves.filter(move => {
+                const newBoard = makeMoveOnBoard(board, move);
+                return !isKingInCheck(newBoard, currentPlayer);
+            });
+        }
+
+        // ===== 走法生成（原版保留） =====
+        function generatePawnMoves(row, col, moves) {
+            const piece = board[row][col]; const player = piece.split('-')[0];
+            const direction = player === 'white' ? -1 : 1;
+            const startRow = player === 'white' ? 6 : 1;
+            if (isValidPosition(row + direction, col) && !board[row + direction][col]) {
+                moves.push({ from:{row,col}, to:{row:row+direction,col}, piece });
+                if (row === startRow && !board[row + 2*direction][col]) {
+                    moves.push({ from:{row,col}, to:{row:row+2*direction,col}, piece, enPassant:{row:row+direction,col} });
+                }
+            }
+            for (const dcol of [-1,1]) {
+                if (isValidPosition(row+direction, col+dcol)) {
+                    const target = board[row+direction][col+dcol];
+                    if (target && !target.startsWith(player)) {
+                        moves.push({ from:{row,col}, to:{row:row+direction,col:col+dcol}, piece, captured: target });
+                    }
+                }
+            }
+            if (enPassantTarget && enPassantTarget.row === row + direction) {
+                for (const dcol of [-1,1]) {
+                    if (col + dcol === enPassantTarget.col) {
+                        moves.push({ from:{row,col}, to:{row:row+direction,col:col+dcol}, piece, enPassantCapture:true, captured: board[row][col+dcol] });
+                    }
+                }
+            }
+        }
+        function generateRookMoves(row, col, moves) {
+            const piece = board[row][col]; const player = piece.split('-')[0];
+            const dirs = [{row:-1,col:0},{row:1,col:0},{row:0,col:-1},{row:0,col:1}];
+            for (const d of dirs){
+                for (let i=1;i<8;i++){
+                    const nr=row+d.row*i, nc=col+d.col*i;
+                    if (!isValidPosition(nr,nc)) break;
+                    const t=board[nr][nc];
+                    if (!t) moves.push({from:{row,col}, to:{row:nr,col:nc}, piece});
+                    else { if (!t.startsWith(player)) moves.push({from:{row,col}, to:{row:nr,col:nc}, piece, captured:t}); break; }
+                }
+            }
+        }
+        function generateKnightMoves(row, col, moves) {
+            const piece = board[row][col]; const player = piece.split('-')[0];
+            const ks = [{row:-2,col:-1},{row:-2,col:1},{row:-1,col:-2},{row:-1,col:2},{row:1,col:-2},{row:1,col:2},{row:2,col:-1},{row:2,col:1}];
+            for (const m of ks){
+                const nr=row+m.row, nc=col+m.col;
+                if (isValidPosition(nr,nc)){
+                    const t=board[nr][nc];
+                    if (!t || !t.startsWith(player)) moves.push({from:{row,col}, to:{row:nr,col:nc}, piece, captured:t});
+                }
+            }
+        }
+        function generateBishopMoves(row, col, moves) {
+            const piece = board[row][col]; const player = piece.split('-')[0];
+            const dirs=[{row:-1,col:-1},{row:-1,col:1},{row:1,col:-1},{row:1,col:1}];
+            for (const d of dirs){
+                for (let i=1;i<8;i++){
+                    const nr=row+d.row*i, nc=col+d.col*i;
+                    if (!isValidPosition(nr,nc)) break;
+                    const t=board[nr][nc];
+                    if (!t) moves.push({from:{row,col}, to:{row:nr,col:nc}, piece});
+                    else { if (!t.startsWith(player)) moves.push({from:{row,col}, to:{row:nr,col:nc}, piece, captured:t}); break; }
+                }
+            }
+        }
+        function generateQueenMoves(row, col, moves) { generateRookMoves(row,col,moves); generateBishopMoves(row,col,moves); }
+        function generateKingMoves(row, col, moves) {
+            const piece = board[row][col]; const player = piece.split('-')[0];
+            const ds=[{row:-1,col:-1},{row:-1,col:0},{row:-1,col:1},{row:0,col:-1},{row:0,col:1},{row:1,col:-1},{row:1,col:0},{row:1,col:1}];
+            for (const d of ds){
+                const nr=row+d.row, nc=col+d.col;
+                if (isValidPosition(nr,nc)){
+                    const t=board[nr][nc];
+                    if (!t || !t.startsWith(player)) moves.push({from:{row,col}, to:{row:nr,col:nc}, piece, captured:t});
+                }
+            }
+            // 易位（保留原逻辑）
+            if (!isKingInCheck(board, player)) {
+                const r = player==='white'?7:0;
+                if (castlingRights[player].kingSide && !board[r][5] && !board[r][6] &&
+                    !isSquareAttacked(board,{row:r,col:5},player) && !isSquareAttacked(board,{row:r,col:6},player)) {
+                    moves.push({from:{row,col}, to:{row:r,col:6}, piece, castling:'short'});
+                }
+                if (castlingRights[player].queenSide && !board[r][1] && !board[r][2] && !board[r][3] &&
+                    !isSquareAttacked(board,{row:r,col:2},player) && !isSquareAttacked(board,{row:r,col:3},player)) {
+                    moves.push({from:{row,col}, to:{row:r,col:2}, piece, castling:'long'});
+                }
+            }
+        }
+
+        function isValidPosition(row, col) { return row>=0 && row<8 && col>=0 && col<8; }
+
+        // ===== 攻击检测（原版保留） =====
+        function isSquareAttacked(board, square, byPlayer) {
+            const opponent = byPlayer === 'white' ? 'black' : 'white';
+            for (let row=0; row<8; row++){
+                for (let col=0; col<8; col++){
+                    const piece=board[row][col];
+                    if (piece && piece.startsWith(opponent)) {
+                        const moves = generatePieceMovesWithoutCastling(board, {row,col});
+                        if (moves.some(m => m.to.row===square.row && m.to.col===square.col)) return true;
+                    }
+                }
+            }
+            return false;
+        }
+        function generatePieceMovesWithoutCastling(board, pos){
+            const piece = board[pos.row][pos.col];
+            if (!piece) return [];
+            const moves = [];
+            const t = piece.split('-')[1];
+            switch (t) {
+                case 'pawn':   generatePawnMovesForAttackCheck(board, pos, moves); break;
+                case 'rook':   generateRookMovesForAttackCheck(board, pos, moves); break;
+                case 'knight': generateKnightMovesForAttackCheck(board, pos, moves); break;
+                case 'bishop': generateBishopMovesForAttackCheck(board, pos, moves); break;
+                case 'queen':  generateQueenMovesForAttackCheck(board, pos, moves); break;
+                case 'king':   generateKingMovesForAttackCheck(board, pos, moves); break;
+            }
+            return moves;
+        }
+        function generatePawnMovesForAttackCheck(board, position, moves) {
+            const piece = board[position.row][position.col]; const player = piece.split('-')[0];
+            const direction = player === 'white' ? -1 : 1;
+            for (const dcol of [-1,1]) {
+                const nr = position.row + direction; const nc = position.col + dcol;
+                if (isValidPosition(nr, nc)) moves.push({ from: position, to: {row:nr,col:nc}, piece });
+            }
+        }
+        function generateRookMovesForAttackCheck(board, position, moves) {
+            const piece = board[position.row][position.col];
+            const dirs=[{row:-1,col:0},{row:1,col:0},{row:0,col:-1},{row:0,col:1}];
+            for (const d of dirs){
+                for (let i=1;i<8;i++){
+                    const nr=position.row+d.row*i, nc=position.col+d.col*i;
+                    if (!isValidPosition(nr,nc)) break;
+                    const t=board[nr][nc];
+                    moves.push({ from: position, to:{row:nr,col:nc}, piece });
+                    if (t) break;
+                }
+            }
+        }
+        function generateKnightMovesForAttackCheck(board, position, moves) {
+            const piece = board[position.row][position.col];
+            const ks=[{row:-2,col:-1},{row:-2,col:1},{row:-1,col:-2},{row:-1,col:2},{row:1,col:-2},{row:1,col:2},{row:2,col:-1},{row:2,col:1}];
+            for (const m of ks){
+                const nr=position.row+m.row, nc=position.col+m.col;
+                if (isValidPosition(nr,nc)) moves.push({from:position, to:{row:nr,col:nc}, piece});
+            }
+        }
+        function generateBishopMovesForAttackCheck(board, position, moves) {
+            const piece = board[position.row][position.col];
+            const dirs=[{row:-1,col:-1},{row:-1,col:1},{row:1,col:-1},{row:1,col:1}];
+            for (const d of dirs){
+                for (let i=1;i<8;i++){
+                    const nr=position.row+d.row*i, nc=position.col+d.col*i;
+                    if (!isValidPosition(nr,nc)) break;
+                    const t=board[nr][nc];
+                    moves.push({from:position, to:{row:nr,col:nc}, piece});
+                    if (t) break;
+                }
+            }
+        }
+        function generateQueenMovesForAttackCheck(board, position, moves) {
+            generateRookMovesForAttackCheck(board, position, moves);
+            generateBishopMovesForAttackCheck(board, position, moves);
+        }
+        function generateKingMovesForAttackCheck(board, position, moves) {
+            const piece = board[position.row][position.col];
+            const ds=[{row:-1,col:-1},{row:-1,col:0},{row:-1,col:1},{row:0,col:-1},{row:0,col:1},{row:1,col:-1},{row:1,col:0},{row:1,col:1}];
+            for (const d of ds){
+                const nr=position.row+d.row, nc=position.col+d.col;
+                if (isValidPosition(nr,nc)) moves.push({from:position, to:{row:nr,col:nc}, piece});
+            }
+        }
+
+        // ===== 王位置/被将军判定（原版保留） =====
+        function isKingInCheck(board, player) {
+            const kp = findKing(board, player);
+            if (!kp) return false;
+            return isSquareAttacked(board, kp, player);
+        }
+        function findKing(board, player) {
+            for (let r=0;r<8;r++){
+                for (let c=0;c<8;c++){
+                    if (board[r][c] === `${player}-king`) return {row:r,col:c};
+                }
+            }
+            return null;
+        }
+
+        // ===== 执行移动（原版保留） =====
+        function makeMove(move) {
+            gameHistory.push({
+                board: board.map(row => [...row]),
+                currentPlayer,
+                castlingRights: JSON.parse(JSON.stringify(castlingRights)),
+                enPassantTarget,
+                kingPositions: JSON.parse(JSON.stringify(kingPositions)),
+                moveCount
+            });
+            const { from, to, piece, captured, castling, enPassant, enPassantCapture } = move;
+            if (castling) {
+                const player = piece.split('-')[0]; const r = player==='white'?7:0;
+                if (castling === 'short') {
+                    board[r][6] = board[r][4]; board[r][4]=null;
+                    board[r][5] = board[r][7]; board[r][7]=null;
+                    kingPositions[player] = { row: r, col: 6 };
+                } else {
+                    board[r][2] = board[r][4]; board[r][4]=null;
+                    board[r][3] = board[r][0]; board[r][0]=null;
+                    kingPositions[player] = { row: r, col: 2 };
+                }
+                castlingRights[player].kingSide = false;
+                castlingRights[player].queenSide = false;
+            } else {
+                board[to.row][to.col] = piece;
+                board[from.row][from.col] = null;
+                if (piece.endsWith('king')) {
+                    kingPositions[piece.split('-')[0]] = { row: to.row, col: to.col };
+                }
+                if (enPassantCapture) { board[from.row][to.col] = null; }
+                if (piece.endsWith('pawn')) {
+                    const player = piece.split('-')[0];
+                    const promoRow = player==='white'?0:7;
+                    if (to.row === promoRow) board[to.row][to.col] = `${player}-queen`;
+                }
+                if (piece.endsWith('king')) {
+                    castlingRights[piece.split('-')[0]].kingSide = false;
+                    castlingRights[piece.split('-')[0]].queenSide = false;
+                } else if (piece.endsWith('rook')) {
+                    const player = piece.split('-')[0]; const rr = player==='white'?7:0;
+                    if (from.row===rr && from.col===0) castlingRights[player].queenSide=false;
+                    else if (from.row===rr && from.col===7) castlingRights[player].kingSide=false;
+                }
+                if (enPassant) enPassantTarget = enPassant; else enPassantTarget = null;
+                if (captured) capturedPieces[currentPlayer].push(captured);
+            }
+            moveCount++;
+            currentPlayer = currentPlayer==='white' ? 'black' : 'white';
+            selectedSquare = null; possibleMoves = []; renderBoard(); updateStatus();
+            if (currentPlayer==='black' && !isGameOver()) setTimeout(makeAIMove, 200);
+        }
+
+        function makeMoveOnBoard(board, move) {
+            const nb = board.map(row => [...row]);
+            const { from, to, piece, castling, enPassantCapture } = move;
+            if (castling){
+                const player = piece.split('-')[0]; const r = player==='white'?7:0;
+                if (castling==='short'){ nb[r][6]=nb[r][4]; nb[r][4]=null; nb[r][5]=nb[r][7]; nb[r][7]=null; }
+                else { nb[r][2]=nb[r][4]; nb[r][4]=null; nb[r][3]=nb[r][0]; nb[r][0]=null; }
+            } else {
+                nb[to.row][to.col] = piece; nb[from.row][from.col]=null;
+                if (enPassantCapture) nb[from.row][to.col]=null;
+                if (piece.endsWith('pawn')) {
+                    const player = piece.split('-')[0];
+                    const pr = player==='white'?0:7;
+                    if (to.row===pr) nb[to.row][to.col]=`${player}-queen`;
+                }
+            }
+            return nb;
+        }
+
+        // ===== 结束判定（原版保留） =====
+        function isGameOver() {
+            const hasValidMove = hasAnyValidMove(currentPlayer);
+            if (!hasValidMove) {
+                return true; // 将死或僵局
+            }
+            if (moveCount >= 100) return true; // 简化50步规则
+            if (gameHistory.length >= 6) {
+                const lastBoard = JSON.stringify(gameHistory[gameHistory.length - 1].board);
+                const count = gameHistory.filter(s => JSON.stringify(s.board) === lastBoard).length;
+                if (count >= 3) return true;
+            }
+            return false;
+        }
+        function hasAnyValidMove(player) {
+            for (let r=0;r<8;r++){
+                for (let c=0;c<8;c++){
+                    const p=board[r][c];
+                    if (p && p.startsWith(player)) {
+                        const ms = generatePossibleMoves(r,c);
+                        if (ms.length>0) return true;
+                    }
+                }
+            }
+            return false;
+        }
+        function updateStatus() {
+            const el = document.getElementById('status');
+            if (isGameOver()) {
+                if (isKingInCheck(board, currentPlayer)) el.textContent = `${currentPlayer==='white'?'黑方':'白方'}获胜！`;
+                else el.textContent = '和棋！';
+            } else {
+                el.textContent = `${currentPlayer==='white'?'白方':'黑方'}回合` + (isKingInCheck(board, currentPlayer) ? ' (将军!)' : '');
+            }
+        }
+
+        // ===== AI：加入走法排序 + 静态搜索(Quiescence) =====
+        function makeAIMove() {
+            if (isGameOver()) return;
+            aiThinking = true; document.getElementById('thinking-indicator').style.display = 'block';
+            searchStartTime = Date.now();
+            searchTimeout = setTimeout(() => {
+                const m = getRandomMove();
+                if (m) makeMove(m);
+                aiThinking = false; document.getElementById('thinking-indicator').style.display = 'none';
+            }, 10000);
+
+            let bestMove = null;
+            for (let depth=1; depth<=maxDepth; depth++){
+                const m = findBestMove(depth);
+                if (m) bestMove = m;
+                if (Date.now() - searchStartTime > 5000) break; // 时间切断
+            }
+            clearTimeout(searchTimeout);
+            if (bestMove) makeMove(bestMove);
+            else { const m=getRandomMove(); if (m) makeMove(m); }
+            aiThinking = false; document.getElementById('thinking-indicator').style.display = 'none';
+        }
+        function getRandomMove() {
+            const all = [];
+            for (let r=0;r<8;r++){
+                for (let c=0;c<8;c++){
+                    const p=board[r][c];
+                    if (p && p.startsWith('black')) all.push(...generatePossibleMoves(r,c));
+                }
+            }
+            if (!all.length) return null;
+            return all[Math.floor(Math.random()*all.length)];
+        }
+
+        function orderMoves(moves){
+            // 简单MVV-LVA + 升变优先
+            function pieceBaseValue(type){
+                return Math.abs(PIECE_VALUES[type] || 0);
+            }
+            return moves.slice().sort((a,b)=>{
+                const aCap = a.captured ? pieceBaseValue(a.captured.split('-')[1]) : 0;
+                const bCap = b.captured ? pieceBaseValue(b.captured.split('-')[1]) : 0;
+                const aAtt = pieceBaseValue(a.piece.split('-')[1]);
+                const bAtt = pieceBaseValue(b.piece.split('-')[1]);
+                const aPromo = (a.piece.endsWith('pawn') && (a.to.row===0 || a.to.row===7)) ? 1 : 0;
+                const bPromo = (b.piece.endsWith('pawn') && (b.to.row===0 || b.to.row===7)) ? 1 : 0;
+                const aScore = aPromo*1000 + (aCap*10 - aAtt);
+                const bScore = bPromo*1000 + (bCap*10 - bAtt);
+                return bScore - aScore;
+            });
+        }
+
+        function findBestMove(depth) {
+            let bestMove = null, bestValue = -Infinity;
+            const allMoves = [];
+            for (let r=0;r<8;r++){
+                for (let c=0;c<8;c++){
+                    const p=board[r][c];
+                    if (p && p.startsWith('black')) allMoves.push(...generatePossibleMoves(r,c));
+                }
+            }
+            const moves = orderMoves(allMoves);
+            for (const mv of moves){
+                const nb = makeMoveOnBoard(board, mv);
+                const val = minimax(nb, depth-1, -Infinity, Infinity, false);
+                if (val > bestValue) { bestValue = val; bestMove = mv; }
+                if (bestValue === Infinity) return bestMove;
+            }
+            return bestMove;
+        }
+
+        function minimax(boardPos, depth, alpha, beta, maximizingPlayer) {
+            if (Date.now() - searchStartTime > 9000) return 0; // 超时返回中性
+            if (depth === 0 || isGameOverForBoard(boardPos)) {
+                return quiescence(boardPos, alpha, beta, maximizingPlayer);
+            }
+
+            if (maximizingPlayer) {
+                let maxEval = -Infinity;
+                const moves = orderMoves(getAllPossibleMovesForBoard(boardPos, 'black'));
+                for (const m of moves){
+                    const nb = makeMoveOnBoard(boardPos, m);
+                    const ev = minimax(nb, depth-1, alpha, beta, false);
+                    if (ev > maxEval) maxEval = ev;
+                    if (ev > alpha) alpha = ev;
+                    if (beta <= alpha) break;
+                }
+                return maxEval;
+            } else {
+                let minEval = Infinity;
+                const moves = orderMoves(getAllPossibleMovesForBoard(boardPos, 'white'));
+                for (const m of moves){
+                    const nb = makeMoveOnBoard(boardPos, m);
+                    const ev = minimax(nb, depth-1, alpha, beta, true);
+                    if (ev < minEval) minEval = ev;
+                    if (ev < beta) beta = ev;
+                    if (beta <= alpha) break;
+                }
+                return minEval;
+            }
+        }
+
+        // 静态搜索：只扩展吃子（含升变）
+        function quiescence(boardPos, alpha, beta, maximizingPlayer) {
+            const standPat = evaluateBoard(boardPos);
+            if (maximizingPlayer) {
+                if (standPat >= beta) return beta;
+                if (standPat > alpha) alpha = standPat;
+                const caps = orderMoves(getCapturesForBoard(boardPos, 'black'));
+                for (const m of caps) {
+                    const nb = makeMoveOnBoard(boardPos, m);
+                    const score = quiescence(nb, alpha, beta, false);
+                    if (score > alpha) alpha = score;
+                    if (alpha >= beta) break;
+                }
+                return alpha;
+            } else {
+                if (standPat <= alpha) return alpha;
+                if (standPat < beta) beta = standPat;
+                const caps = orderMoves(getCapturesForBoard(boardPos, 'white'));
+                for (const m of caps) {
+                    const nb = makeMoveOnBoard(boardPos, m);
+                    const score = quiescence(nb, alpha, beta, true);
+                    if (score < beta) beta = score;
+                    if (alpha >= beta) break;
+                }
+                return beta;
+            }
+        }
+
+        function isGameOverForBoard(bd) {
+            const w = hasAnyValidMoveForBoard(bd, 'white');
+            const k = hasAnyValidMoveForBoard(bd, 'black');
+            if (!w || !k) return true;
+            return false;
+        }
+        function hasAnyValidMoveForBoard(bd, player) {
+            for (let r=0;r<8;r++){
+                for (let c=0;c<8;c++){
+                    const p=bd[r][c];
+                    if (p && p.startsWith(player)) {
+                        const ms=generatePossibleMovesForBoard(bd,r,c);
+                        if (ms.length>0) return true;
+                    }
+                }
+            }
+            return false;
+        }
+        function generatePossibleMovesForBoard(bd, row, col) {
+            const piece = bd[row][col];
+            if (!piece) return [];
+            const moves = [];
+            const t = piece.split('-')[1];
+            switch (t) {
+                case 'pawn':   generatePawnMovesForBoard(bd,row,col,moves); break;
+                case 'rook':   generateRookMovesForBoard(bd,row,col,moves); break;
+                case 'knight': generateKnightMovesForBoard(bd,row,col,moves); break;
+                case 'bishop': generateBishopMovesForBoard(bd,row,col,moves); break;
+                case 'queen':  generateQueenMovesForBoard(bd,row,col,moves); break;
+                case 'king':   generateKingMovesForBoard(bd,row,col,moves); break;
+            }
+            return moves.filter(m => !isKingInCheckForBoard(makeMoveOnBoard(bd,m), piece.split('-')[0]));
+        }
+        function getAllPossibleMovesForBoard(bd, player) {
+            const all=[];
+            for (let r=0;r<8;r++){
+                for (let c=0;c<8;c++){
+                    const p=bd[r][c];
+                    if (p && p.startsWith(player)) all.push(...generatePossibleMovesForBoard(bd,r,c));
+                }
+            }
+            return all;
+        }
+        function getCapturesForBoard(bd, player) {
+            return getAllPossibleMovesForBoard(bd, player).filter(m => m.captured || (m.piece.endsWith('pawn') && (m.to.row===0 || m.to.row===7)));
+        }
+
+        // —— 为棋盘副本的各类生成函数（与原版一致） ——
+        function generatePawnMovesForBoard(bd,row,col,moves){
+            const piece = bd[row][col]; const player = piece.split('-')[0];
+            const dir = player==='white' ? -1 : 1; const startRow = player==='white'?6:1;
+            if (isValidPosition(row+dir,col) && !bd[row+dir][col]) {
+                moves.push({from:{row,col},to:{row:row+dir,col},piece});
+                if (row===startRow && !bd[row+2*dir][col]) {
+                    moves.push({from:{row,col},to:{row:row+2*dir,col},piece});
+                }
+            }
+            for (const dc of [-1,1]){
+                if (isValidPosition(row+dir,col+dc)) {
+                    const t=bd[row+dir][col+dc];
+                    if (t && !t.startsWith(player)) moves.push({from:{row,col},to:{row:row+dir,col:col+dc},piece,captured:t});
+                }
+            }
+        }
+        function generateRookMovesForBoard(bd,row,col,moves){
+            const piece = bd[row][col]; const player = piece.split('-')[0];
+            const dirs=[{row:-1,col:0},{row:1,col:0},{row:0,col:-1},{row:0,col:1}];
+            for (const d of dirs){
+                for (let i=1;i<8;i++){
+                    const nr=row+d.row*i, nc=col+d.col*i;
+                    if (!isValidPosition(nr,nc)) break;
+                    const t=bd[nr][nc];
+                    if (!t) moves.push({from:{row,col},to:{row:nr,col:nc},piece});
+                    else { if (!t.startsWith(player)) moves.push({from:{row,col},to:{row:nr,col:nc},piece,captured:t}); break; }
+                }
+            }
+        }
+        function generateKnightMovesForBoard(bd,row,col,moves){
+            const piece = bd[row][col]; const player = piece.split('-')[0];
+            const ks=[{row:-2,col:-1},{row:-2,col:1},{row:-1,col:-2},{row:-1,col:2},{row:1,col:-2},{row:1,col:2},{row:2,col:-1},{row:2,col:1}];
+            for (const m of ks){
+                const nr=row+m.row, nc=col+m.col;
+                if (isValidPosition(nr,nc)){
+                    const t=bd[nr][nc];
+                    if (!t || !t.startsWith(player)) moves.push({from:{row,col},to:{row:nr,col:nc},piece,captured:t});
+                }
+            }
+        }
+        function generateBishopMovesForBoard(bd,row,col,moves){
+            const piece = bd[row][col]; const player = piece.split('-')[0];
+            const dirs=[{row:-1,col:-1},{row:-1,col:1},{row:1,col:-1},{row:1,col:1}];
+            for (const d of dirs){
+                for (let i=1;i<8;i++){
+                    const nr=row+d.row*i, nc=col+d.col*i;
+                    if (!isValidPosition(nr,nc)) break;
+                    const t=bd[nr][nc];
+                    if (!t) moves.push({from:{row,col},to:{row:nr,col:nc},piece});
+                    else { if (!t.startsWith(player)) moves.push({from:{row,col},to:{row:nr,col:nc},piece,captured:t}); break; }
+                }
+            }
+        }
+        function generateQueenMovesForBoard(bd,row,col,moves){ generateRookMovesForBoard(bd,row,col,moves); generateBishopMovesForBoard(bd,row,col,moves); }
+        function generateKingMovesForBoard(bd,row,col,moves){
+            const piece = bd[row][col]; const player = piece.split('-')[0];
+            const ds=[{row:-1,col:-1},{row:-1,col:0},{row:-1,col:1},{row:0,col:-1},{row:0,col:1},{row:1,col:-1},{row:1,col:0},{row:1,col:1}];
+            for (const d of ds){
+                const nr=row+d.row, nc=col+d.col;
+                if (isValidPosition(nr,nc)){
+                    const t=bd[nr][nc];
+                    if (!t || !t.startsWith(player)) moves.push({from:{row,col},to:{row:nr,col:nc},piece,captured:t});
+                }
+            }
+        }
+        function isKingInCheckForBoard(bd, player){
+            const kp = findKingForBoard(bd, player);
+            if (!kp) return false;
+            return isSquareAttackedForBoard(bd, kp, player);
+        }
+        function findKingForBoard(bd, player){
+            for (let r=0;r<8;r++){
+                for (let c=0;c<8;c++){
+                    if (bd[r][c] === `${player}-king`) return {row:r,col:c};
+                }
+            }
+            return null;
+        }
+        function isSquareAttackedForBoard(bd, square, byPlayer){
+            const opp = byPlayer==='white'?'black':'white';
+            for (let r=0;r<8;r++){
+                for (let c=0;c<8;c++){
+                    const p=bd[r][c];
+                    if (p && p.startsWith(opp)){
+                        const ms = generatePieceMovesWithoutCastlingForBoard(bd,{row:r,col:c});
+                        if (ms.some(m=>m.to.row===square.row && m.to.col===square.col)) return true;
+                    }
+                }
+            }
+            return false;
+        }
+        function generatePieceMovesWithoutCastlingForBoard(bd, pos){
+            const piece = bd[pos.row][pos.col];
+            if (!piece) return [];
+            const moves=[]; const t=piece.split('-')[1];
+            switch (t){
+                case 'pawn':   generatePawnMovesForAttackCheckForBoard(bd,pos,moves); break;
+                case 'rook':   generateRookMovesForAttackCheckForBoard(bd,pos,moves); break;
+                case 'knight': generateKnightMovesForAttackCheckForBoard(bd,pos,moves); break;
+                case 'bishop': generateBishopMovesForAttackCheckForBoard(bd,pos,moves); break;
+                case 'queen':  generateQueenMovesForAttackCheckForBoard(bd,pos,moves); break;
+                case 'king':   generateKingMovesForAttackCheckForBoard(bd,pos,moves); break;
+            }
+            return moves;
+        }
+        function generatePawnMovesForAttackCheckForBoard(bd,pos,moves){
+            const piece=bd[pos.row][pos.col]; const player=piece.split('-')[0]; const dir=player==='white'?-1:1;
+            for (const dc of [-1,1]){
+                const nr=pos.row+dir, nc=pos.col+dc;
+                if (isValidPosition(nr,nc)) moves.push({from:pos,to:{row:nr,col:nc},piece});
+            }
+        }
+        function generateRookMovesForAttackCheckForBoard(bd,pos,moves){
+            const piece=bd[pos.row][pos.col]; const dirs=[{row:-1,col:0},{row:1,col:0},{row:0,col:-1},{row:0,col:1}];
+            for (const d of dirs){
+                for (let i=1;i<8;i++){
+                    const nr=pos.row+d.row*i, nc=pos.col+d.col*i;
+                    if (!isValidPosition(nr,nc)) break;
+                    const t=bd[nr][nc];
+                    moves.push({from:pos,to:{row:nr,col:nc},piece});
+                    if (t) break;
+                }
+            }
+        }
+        function generateKnightMovesForAttackCheckForBoard(bd,pos,moves){
+            const piece=bd[pos.row][pos.col];
+            const ks=[{row:-2,col:-1},{row:-2,col:1},{row:-1,col:-2},{row:-1,col:2},{row:1,col:-2},{row:1,col:2},{row:2,col:-1},{row:2,col:1}];
+            for (const m of ks){
+                const nr=pos.row+m.row, nc=pos.col+m.col;
+                if (isValidPosition(nr,nc)) moves.push({from:pos,to:{row:nr,col:nc},piece});
+            }
+        }
+        function generateBishopMovesForAttackCheckForBoard(bd,pos,moves){
+            const piece=bd[pos.row][pos.col];
+            const dirs=[{row:-1,col:-1},{row:-1,col:1},{row:1,col:-1},{row:1,col:1}];
+            for (const d of dirs){
+                for (let i=1;i<8;i++){
+                    const nr=pos.row+d.row*i, nc=pos.col+d.col*i;
+                    if (!isValidPosition(nr,nc)) break;
+                    const t=bd[nr][nc];
+                    moves.push({from:pos,to:{row:nr,col:nc},piece});
+                    if (t) break;
+                }
+            }
+        }
+        function generateQueenMovesForAttackCheckForBoard(bd,pos,moves){
+            generateRookMovesForAttackCheckForBoard(bd,pos,moves);
+            generateBishopMovesForAttackCheckForBoard(bd,pos,moves);
+        }
+        function generateKingMovesForAttackCheckForBoard(bd,pos,moves){
+            const piece=bd[pos.row][pos.col];
+            const ds=[{row:-1,col:-1},{row:-1,col:0},{row:-1,col:1},{row:0,col:-1},{row:0,col:1},{row:1,col:-1},{row:1,col:0},{row:1,col:1}];
+            for (const d of ds){
+                const nr=pos.row+d.row, nc=pos.col+d.col;
+                if (isValidPosition(nr,nc)) moves.push({from:pos,to:{row:nr,col:nc},piece});
+            }
+        }
+
+        // ======= 评估函数（核心改进）：分阶段插值 + 结构/机动/安全 =======
+        // 评估返回：黑方优势为正，白方优势为负（保持原项目约定）
+        function evaluateBoard(bd) {
+            // 计算阶段
+            let phase = TOTAL_PHASE;
+            let mgScore = 0, egScore = 0;
+
+            // 材料 + PST
+            for (let r=0;r<8;r++){
+                for (let c=0;c<8;c++){
+                    const piece = bd[r][c];
+                    if (!piece) continue;
+                    const [player, type] = piece.split('-');
+
+                    // 材料
+                    const val = PIECE_VALUES[type] || 0;
+                    if (player==='white') { mgScore -= val; egScore -= val; }
+                    else { mgScore += val; egScore += val; }
+
+                    // PST（开中局/残局）
+                    const pstMg = pstValue(PST_MG[type], r, c, player);
+                    const pstEg = pstValue(PST_EG[type], r, c, player);
+                    if (player==='white') { mgScore -= pstMg; egScore -= pstEg; }
+                    else { mgScore += pstMg; egScore += pstEg; }
+
+                    // 阶段值扣减（越少子力越接近残局）
+                    phase -= countPhasePiece(piece);
+                }
+            }
+            if (phase < 0) phase = 0; if (phase > TOTAL_PHASE) phase = TOTAL_PHASE;
+
+            // 结构与特征分（统一按“黑加白减”）
+            const blackMob = getPseudoMobility(bd, 'black');
+            const whiteMob = getPseudoMobility(bd, 'white');
+            const mobilityScore = (blackMob - whiteMob) * 2;  // 系数适中
+
+            const pawnStruct = pawnStructureScore(bd, 'black') - pawnStructureScore(bd, 'white');
+            const rookFiles   = rookFileScore(bd, 'black')   - rookFileScore(bd, 'white');
+            const bishops     = bishopPairScore(bd, 'black')  - bishopPairScore(bd, 'white');
+            const kingSafety  = kingSafetyScore(bd, 'black')  - kingSafetyScore(bd, 'white');
+
+            // 将这些特征分同时计入 mg/eg（也可按阶段权重不同分配，这里取一致）
+            mgScore += mobilityScore + pawnStruct + rookFiles + bishops + kingSafety;
+            egScore += mobilityScore + pawnStruct + rookFiles + bishops + kingSafety;
+
+            // 分阶段插值
+            const score = Math.round((mgScore * phase + egScore * (TOTAL_PHASE - phase)) / TOTAL_PHASE);
+            return score / 100.0; // 缩放回与原先相近的量级（保持稳定）
+        }
+
+        // ===== 初始化与UI事件 =====
+        function undoMove() {
+            if (gameHistory.length===0 || aiThinking) return;
+            const last = gameHistory.pop();
+            board = last.board; currentPlayer = last.currentPlayer;
+            castlingRights = last.castlingRights; enPassantTarget = last.enPassantTarget;
+            kingPositions = last.kingPositions; moveCount = last.moveCount;
+            selectedSquare = null; possibleMoves = []; renderBoard(); updateStatus();
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeBoard();
+            document.getElementById('new-game-btn').addEventListener('click', initializeBoard);
+            document.getElementById('undo-btn').addEventListener('click', undoMove);
+            const slider = document.getElementById('difficulty-slider');
+            const val = document.getElementById('difficulty-value');
+            slider.addEventListener('input', () => { maxDepth = parseInt(slider.value); val.textContent = maxDepth; });
+        });
+    </script>
+</body>
+</html>
