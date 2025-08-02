@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -22,22 +23,6 @@
             return params;
         }
 
-        // 处理输入序列长度为8
-        function processInputSequence(sequence) {
-            // 如果序列长度大于8，截取最后8个字符
-            if (sequence.length > 8) {
-                return sequence.slice(-8);
-            }
-            
-            // 如果序列长度小于8，在前面用'A'填充
-            if (sequence.length < 8) {
-                return 'A'.repeat(8 - sequence.length) + sequence;
-            }
-            
-            // 如果长度正好是8，直接返回
-            return sequence;
-        }
-
         // 主函数
         async function main() {
             try {
@@ -55,9 +40,6 @@
                     throw new Error('输入序列只能包含A、B、C字符');
                 }
                 
-                // 处理输入序列长度为8
-                const processedSequence = processInputSequence(inputSequence);
-                
                 // 加载模型
                 console.log('正在加载模型...');
                 const model = await tf.loadLayersModel('./model.json');
@@ -65,43 +47,29 @@
                 
                 // 准备输入数据
                 // 将ABC转换为数值: A=0, B=1, C=2
-                const numericalInput = processedSequence.split('').map(char => {
+                const numericalInput = inputSequence.split('').map(char => {
                     return char === 'A' ? 0 : char === 'B' ? 1 : 2;
                 });
                 
-                // 创建3D张量 (形状: [batchSize, sequenceLength, features])
-                const inputTensor = tf.tensor3d([numericalInput.map(x => [x])], [1, 8, 1]);
+                // 创建张量 (形状: [batchSize, sequenceLength])
+                const inputTensor = tf.tensor2d([numericalInput], [1, numericalInput.length]);
                 
                 // 进行预测
                 console.log('正在进行预测...');
                 const prediction = model.predict(inputTensor);
                 const predictionData = await prediction.data();
                 
-                // 获取预测结果（取概率最高的字符）
-                const probabilities = {
-                    'A': predictionData[0],
-                    'B': predictionData[1],
-                    'C': predictionData[2]
-                };
-                
-                // 找到概率最高的字符
-                let maxProb = 0;
-                let predictedChar = 'A';
-                for (const char in probabilities) {
-                    if (probabilities[char] > maxProb) {
-                        maxProb = probabilities[char];
-                        predictedChar = char;
-                    }
-                }
+                // 将预测结果转换为ABC
+                const result = predictionData.map(val => {
+                    const index = Math.round(val);
+                    return index === 0 ? 'A' : index === 1 ? 'B' : 'C';
+                }).join('');
                 
                 // 返回JSON结果
                 const response = {
                     status: 'success',
                     input: inputSequence,
-                    processedInput: processedSequence,
-                    sequenceLength: inputSequence.length,
-                    prediction: predictedChar,
-                    probabilities: probabilities,
+                    prediction: result,
                     timestamp: new Date().toISOString()
                 };
                 
