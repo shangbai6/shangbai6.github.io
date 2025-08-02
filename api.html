@@ -1,96 +1,133 @@
-
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <title>序列预测API</title>
-    <!-- 加载TensorFlow.js -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+ <meta charset="UTF-8">
+ <title>序列预测API</title>
+ <!-- 加载TensorFlow.js -->
+ <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
 </head>
 <body>
-    <script>
-        // 解析URL参数
-        function getUrlParams() {
-            const params = {};
-            const queryString = window.location.search.substring(1);
-            const regex = /([^&=]+)=([^&]*)/g;
-            let m;
-            
-            while (m = regex.exec(queryString)) {
-                params[decodeURIComponent(m[1])] = decodeURIComponent(m[2]);
-            }
-            
-            return params;
-        }
+ <script>
+ // 解析URL参数
+ function getUrlParams() {
+   const params = {};
+   const queryString = window.location.search.substring(1);
+   const regex = /([^&=]+)=([^&]*)/g;
+   let m;
+   
+   while (m = regex.exec(queryString)) {
+     params[decodeURIComponent(m[1])] = decodeURIComponent(m[2]);
+   }
+   
+   return params;
+ }
 
-        // 主函数
-        async function main() {
-            try {
-                // 获取URL参数
-                const params = getUrlParams();
-                const inputSequence = params.input || '';
-                
-                // 验证输入
-                if (!inputSequence) {
-                    throw new Error('缺少必需参数: input');
-                }
-                
-                // 验证输入序列格式
-                if (!/^[ABC]+$/.test(inputSequence)) {
-                    throw new Error('输入序列只能包含A、B、C字符');
-                }
-                
-                // 加载模型
-                console.log('正在加载模型...');
-                const model = await tf.loadLayersModel('./model.json');
-                console.log('模型加载成功');
-                
-                // 准备输入数据
-                // 将ABC转换为数值: A=0, B=1, C=2
-                const numericalInput = inputSequence.split('').map(char => {
-                    return char === 'A' ? 0 : char === 'B' ? 1 : 2;
-                });
-                
-                // 创建张量 (形状: [batchSize, sequenceLength])
-                const inputTensor = tf.tensor2d([numericalInput], [1, numericalInput.length]);
-                
-                // 进行预测
-                console.log('正在进行预测...');
-                const prediction = model.predict(inputTensor);
-                const predictionData = await prediction.data();
-                
-                // 将预测结果转换为ABC
-                const result = predictionData.map(val => {
-                    const index = Math.round(val);
-                    return index === 0 ? 'A' : index === 1 ? 'B' : 'C';
-                }).join('');
-                
-                // 返回JSON结果
-                const response = {
-                    status: 'success',
-                    input: inputSequence,
-                    prediction: result,
-                    timestamp: new Date().toISOString()
-                };
-                
-                // 输出JSON响应
-                document.body.innerHTML = `<pre>${JSON.stringify(response, null, 2)}</pre>`;
-                
-            } catch (error) {
-                // 错误处理
-                const errorResponse = {
-                    status: 'error',
-                    message: error.message,
-                    timestamp: new Date().toISOString()
-                };
-                
-                document.body.innerHTML = `<pre>${JSON.stringify(errorResponse, null, 2)}</pre>`;
-                console.error('API错误:', error);
-            }
-        }
+ // 处理输入序列长度为8，并转换为one-hot编码
+ function processInputSequence(input) {
+   // 验证输入
+   if (!input || !/^[ABC]+$/.test(input)) {
+     throw new Error("输入序列只能包含A、B、C字符");
+   }
+   
+   // 处理序列长度
+   let processed = input;
+   if (input.length < 8) {
+     // 如果长度不足8，用最后一个字符填充
+     const lastChar = input[input.length - 1];
+     processed = input + lastChar.repeat(8 - input.length);
+   } else if (input.length > 8) {
+     // 如果长度超过8，截取最后8个字符
+     processed = input.slice(-8);
+   }
+   
+   // 转换为one-hot编码
+   const oneHotMap = {
+     'A': [1, 0, 0],
+     'B': [0, 1, 0],
+     'C': [0, 0, 1]
+   };
+   
+   // 创建3维数组 [batch_size=1, timesteps=8, features=3]
+   const sequence = [];
+   for (let i = 0; i < processed.length; i++) {
+     sequence.push(oneHotMap[processed[i]]);
+   }
+   
+   return [sequence]; // 添加批次维度
+ }
 
-        // 执行主函数
-        main();
-    </script>
+ // 主函数
+ async function main() {
+   try {
+     // 获取URL参数
+     const params = getUrlParams();
+     const inputSequence = params.input || '';
+     
+     if (!inputSequence) {
+       throw new Error("缺少必需参数: input");
+     }
+     
+     // 处理输入序列
+     const processedInput = processInputSequence(inputSequence);
+     
+     // 加载模型
+     const model = await tf.loadLayersModel('model/model.json');
+     
+     // 转换为TensorFlow张量
+     const inputTensor = tf.tensor3d(processedInput, [1, 8, 3]);
+     
+     // 进行预测
+     const prediction = model.predict(inputTensor);
+     const predictionData = await prediction.data();
+     
+     // 获取预测结果
+     const classes = ['A', 'B', 'C'];
+     const maxIndex = predictionData.indexOf(Math.max(...predictionData));
+     const result = classes[maxIndex];
+     
+     // 计算概率
+     const probabilities = {};
+     predictionData.forEach((value, index) => {
+       probabilities[classes[index]] = parseFloat(value.toFixed(2));
+     });
+     
+     // 释放张量内存
+     inputTensor.dispose();
+     prediction.dispose();
+     
+     // 返回JSON结果
+     const response = {
+       status: 'success',
+       input: inputSequence,
+       processedInput: processedInput[0].map(arr => 
+         Object.keys({A:[1,0,0], B:[0,1,0], C:[0,0,1]}).find(key => 
+           JSON.stringify({A:[1,0,0], B:[0,1,0], C:[0,0,1]}[key]) === JSON.stringify(arr)
+         )
+       ).join(''),
+       sequenceLength: processedInput[0].length,
+       prediction: result,
+       probabilities: probabilities,
+       timestamp: new Date().toISOString()
+     };
+     
+     // 输出JSON响应
+     document.body.innerHTML = `<pre>${JSON.stringify(response, null, 2)}</pre>`;
+     
+   } catch (error) {
+     // 错误处理
+     const errorResponse = {
+       status: 'error',
+       message: error.message,
+       timestamp: new Date().toISOString()
+     };
+     
+     document.body.innerHTML = `<pre>${JSON.stringify(errorResponse, null, 2)}</pre>`;
+     console.error('API错误:', error);
+   }
+ }
+
+ // 执行主函数
+ main();
+ </script>
 </body>
 </html>
