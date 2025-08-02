@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>字符序列预测API</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+</head>
+<body>
+    <script>
+        // --- 全局变量和常量 ---
+        const charToIndex = { 'A': 0, 'B': 1, 'C': 2 };
+        const indexToChar = { 0: 'A', 1: 'B', 2: 'C' };
+        const VOCAB_SIZE = 3;
+        const PADDING_CHAR = 'A';
+        let model = null;
+        let loadedModelSequenceLength = 0;
+
+        // 解析URL参数
+        function getUrlParams() {
+            const params = {};
+            const queryString = window.location.search.substring(1);
+            const regex = /([^&=]+)=([^&]*)/g;
+            let match;
+            
+            while (match = regex.exec(queryString)) {
+                params[decodeURIComponent(match[1])] = decodeURIComponent(match[2]);
+            }
+            return params;
+        }
+
+        // 输出JSON响应
+        function outputResponse(data) {
+            document.body.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+        }
+
+        // 输出错误响应
+        function outputError(message, code = 400) {
+            outputResponse({
+                error: true,
+                message: message,
+                code: code,
+                timestamp: new Date().toISOString()
+            });
+        }
+
+        // 验证输入序列中的字符是否有效
+        function validateSequenceChars(sequence) {
+            if (!sequence) return "输入序列不能为空";
+            const allowedChars = new Set(Object.keys(charToIndex));
+            for (let i = 0; i < sequence.length; i++) {
+                if (!allowedChars.has(sequence[i])) {
+                    return `序列在位置 ${i} 包含无效字符 '${sequence[i]}'。只允许 A, B, C`;
+                }
+            }
+            return null;
+        }
+
+        // 准备用于模型预测的输入序列
+        function prepareInputSequence(rawInput) {
+            let sequence = rawInput.trim().toUpperCase();
+            if (sequence.length < loadedModelSequenceLength) {
+                const padding = PADDING_CHAR.repeat(loadedModelSequenceLength - sequence.length);
+                return padding + sequence;
+            } else if (sequence.length > loadedModelSequenceLength) {
+                return sequence.slice(-loadedModelSequenceLength);
+            } else {
+                return sequence;
+            }
+        }
+
+        // 预测下一个字符
+        function predictNextChar(inputSequence) {
+            if (!model) throw new Error("模型未加载");
+            if (inputSequence.length !== loadedModelSequenceLength) {
+                throw new Error(`输入序列长度 (${inputSequence.length}) 与模型要求的长度 (${loadedModelSequenceLength}) 不匹配`);
+            }
+
+            return tf.tidy(() => {
+                const inputTensor = tf.tensor3d(
+                    [inputSequence.split('').map(char => tf.oneHot(charToIndex[char], VOCAB_SIZE).arraySync())],
+                    [1, loadedModelSequenceLength, VOCAB_SIZE]
+                );
+                const prediction = model.predict(inputTensor);
+                const predictedIndex = tf.argMax(prediction, axis=1).dataSync()[0];
+                return indexToChar[predictedIndex];
+            });
+        }
+
+        // 主处理函数
+        async function processRequest() {
+            try {
+                const params = getUrlParams();
+                
+                // 验证必需参数
+                if (!params.modelPath) {
+                    return outputError("缺少必需参数: modelPath");
+                }
+                if (!params.sequence) {
+                    return outputError("缺少必需参数: sequence");
+                }
+                if (!params.length) {
+                    return outputError("缺少必需参数: length");
+                }
+                
+                const modelPath = params.modelPath;
+                const rawSeedSequence = params.sequence;
+                const generateLength = parseInt(params.length);
+                
+                // 验证生成长度
+                if (isNaN(generateLength) || generateLength < 1 || generateLength > 200) {
+                    return outputError("生成长度必须是1-200之间的整数");
+                }
+                
+                // 验证输入字符
+                const charValidationError = validateSequenceChars(rawSeedSequence);
+                if (charValidationError) {
+                    return outputError(charValidationError);
+                }
+                
+                // 加载模型
+                try {
+                    model = await tf.loadLayersModel(modelPath);
+                    model.summary();
+                    
+                    if (model.inputs && model.inputs.length > 0 && model.inputs[0].shape && model.inputs[0].shape.length >= 2) {
+                        loadedModelSequenceLength = model.inputs[0].shape[1];
+                        if (!loadedModelSequenceLength || typeof loadedModelSequenceLength !== 'number' || loadedModelSequenceLength <= 0) {
+                            throw new Error("无法从模型配置中确定有效的输入序列长度");
+                        }
+                    } else {
+                        throw new Error("加载的模型结构不符合预期");
+                    }
+                } catch (error) {
+                    return outputError(`模型加载失败: ${error.message}`);
+                }
+                
+                // 处理输入序列并生成结果
+                let currentInputSequence = prepareInputSequence(rawSeedSequence);
+                let generatedSequence = "";
+                
+                for (let i = 0; i < generateLength; i++) {
+                    const nextChar = predictNextChar(currentInputSequence);
+                    generatedSequence += nextChar;
+                    currentInputSequence = currentInputSequence.slice(1) + nextChar;
+                }
+                
+                // 返回成功响应
+                outputResponse({
+                    success: true,
+                    inputSequence: rawSeedSequence,
+                    processedSequence: prepareInputSequence(rawSeedSequence),
+                    generatedSequence: generatedSequence,
+                    generatedLength: generateLength,
+                    modelSequenceLength: loadedModelSequenceLength,
+                    timestamp: new Date().toISOString()
+                });
+                
+            } catch (error) {
+                outputError(`处理请求时发生错误: ${error.message}`, 500);
+            }
+        }
+
+        // 页面加载后立即处理请求
+        window.addEventListener('DOMContentLoaded', processRequest);
+    </script>
+</body>
+</html>
