@@ -1,133 +1,132 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
- <meta charset="UTF-8">
- <title>序列预测API</title>
- <!-- 加载TensorFlow.js -->
- <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+    <meta charset="UTF-8">
+    <title>序列预测API</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
 </head>
 <body>
- <script>
- // 解析URL参数
- function getUrlParams() {
-   const params = {};
-   const queryString = window.location.search.substring(1);
-   const regex = /([^&=]+)=([^&]*)/g;
-   let m;
-   
-   while (m = regex.exec(queryString)) {
-     params[decodeURIComponent(m[1])] = decodeURIComponent(m[2]);
-   }
-   
-   return params;
- }
+<script>
+    // 获取URL参数
+    function getUrlParameter(name) {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get(name);
+    }
 
- // 处理输入序列长度为8，并转换为one-hot编码
- function processInputSequence(input) {
-   // 验证输入
-   if (!input || !/^[ABC]+$/.test(input)) {
-     throw new Error("输入序列只能包含A、B、C字符");
-   }
-   
-   // 处理序列长度
-   let processed = input;
-   if (input.length < 8) {
-     // 如果长度不足8，用最后一个字符填充
-     const lastChar = input[input.length - 1];
-     processed = input + lastChar.repeat(8 - input.length);
-   } else if (input.length > 8) {
-     // 如果长度超过8，截取最后8个字符
-     processed = input.slice(-8);
-   }
-   
-   // 转换为one-hot编码
-   const oneHotMap = {
-     'A': [1, 0, 0],
-     'B': [0, 1, 0],
-     'C': [0, 0, 1]
-   };
-   
-   // 创建3维数组 [batch_size=1, timesteps=8, features=3]
-   const sequence = [];
-   for (let i = 0; i < processed.length; i++) {
-     sequence.push(oneHotMap[processed[i]]);
-   }
-   
-   return [sequence]; // 添加批次维度
- }
+    // 字符转one-hot编码
+    function charToOneHot(char) {
+        switch(char) {
+            case 'A': return [1, 0, 0];
+            case 'B': return [0, 1, 0];
+            case 'C': return [0, 0, 1];
+            default: return [0, 0, 0]; // 无效字符
+        }
+    }
 
- // 主函数
- async function main() {
-   try {
-     // 获取URL参数
-     const params = getUrlParams();
-     const inputSequence = params.input || '';
-     
-     if (!inputSequence) {
-       throw new Error("缺少必需参数: input");
-     }
-     
-     // 处理输入序列
-     const processedInput = processInputSequence(inputSequence);
-     
-     // 加载模型
-     const model = await tf.loadLayersModel('model/model.json');
-     
-     // 转换为TensorFlow张量
-     const inputTensor = tf.tensor3d(processedInput, [1, 8, 3]);
-     
-     // 进行预测
-     const prediction = model.predict(inputTensor);
-     const predictionData = await prediction.data();
-     
-     // 获取预测结果
-     const classes = ['A', 'B', 'C'];
-     const maxIndex = predictionData.indexOf(Math.max(...predictionData));
-     const result = classes[maxIndex];
-     
-     // 计算概率
-     const probabilities = {};
-     predictionData.forEach((value, index) => {
-       probabilities[classes[index]] = parseFloat(value.toFixed(2));
-     });
-     
-     // 释放张量内存
-     inputTensor.dispose();
-     prediction.dispose();
-     
-     // 返回JSON结果
-     const response = {
-       status: 'success',
-       input: inputSequence,
-       processedInput: processedInput[0].map(arr => 
-         Object.keys({A:[1,0,0], B:[0,1,0], C:[0,0,1]}).find(key => 
-           JSON.stringify({A:[1,0,0], B:[0,1,0], C:[0,0,1]}[key]) === JSON.stringify(arr)
-         )
-       ).join(''),
-       sequenceLength: processedInput[0].length,
-       prediction: result,
-       probabilities: probabilities,
-       timestamp: new Date().toISOString()
-     };
-     
-     // 输出JSON响应
-     document.body.innerHTML = `<pre>${JSON.stringify(response, null, 2)}</pre>`;
-     
-   } catch (error) {
-     // 错误处理
-     const errorResponse = {
-       status: 'error',
-       message: error.message,
-       timestamp: new Date().toISOString()
-     };
-     
-     document.body.innerHTML = `<pre>${JSON.stringify(errorResponse, null, 2)}</pre>`;
-     console.error('API错误:', error);
-   }
- }
+    // 将索引转换为字符
+    function indexToChar(index) {
+        const chars = ['A', 'B', 'C'];
+        return chars[index] || '';
+    }
 
- // 执行主函数
- main();
- </script>
+    // 预处理输入序列
+    function preprocessInput(inputString) {
+        // 验证输入
+        if (!inputString || !/^[ABC]+$/.test(inputString)) {
+            throw new Error('输入序列只能包含A、B、C字符');
+        }
+        
+        // 转换为one-hot编码
+        const oneHotArray = [];
+        for (let i = 0; i < inputString.length; i++) {
+            oneHotArray.push(charToOneHot(inputString[i]));
+        }
+        
+        // 创建张量 [batch_size=1, sequence_length, features=3]
+        return tf.tensor([oneHotArray]);
+    }
+
+    // 主函数
+    (async function() {
+        try {
+            // 获取参数
+            const modelPath = getUrlParameter('model') || 'model.json';
+            const seed = getUrlParameter('seed');
+            const length = parseInt(getUrlParameter('length')) || 10;
+            
+            // 验证参数
+            if (!seed) {
+                throw new Error('缺少必需参数: seed');
+            }
+            if (isNaN(length) || length <= 0) {
+                throw new Error('参数length必须是正整数');
+            }
+            
+            // 加载模型
+            console.log('正在加载模型:', modelPath);
+            const model = await tf.loadLayersModel(modelPath);
+            console.log('模型加载成功');
+            
+            // 预处理输入
+            const inputTensor = preprocessInput(seed);
+            
+            // 生成序列
+            let generatedSequence = seed;
+            let currentSequence = seed;
+            
+            for (let i = 0; i < length; i++) {
+                // 预测下一个字符
+                const prediction = model.predict(inputTensor);
+                const lastStepPrediction = prediction.slice([0, currentSequence.length-1, 0], [1, 1, 3]).reshape([3]);
+                const predictedIndex = lastStepPrediction.argMax().dataSync()[0];
+                const predictedChar = indexToChar(predictedIndex);
+                
+                // 添加到生成序列
+                generatedSequence += predictedChar;
+                
+                // 更新当前序列（移除第一个字符，添加新字符）
+                currentSequence = currentSequence.substring(1) + predictedChar;
+                
+                // 更新输入张量
+                inputTensor.dispose();
+                const newInput = [];
+                for (let j = 0; j < currentSequence.length; j++) {
+                    newInput.push(charToOneHot(currentSequence[j]));
+                }
+                inputTensor = tf.tensor([newInput]);
+                
+                // 释放内存
+                prediction.dispose();
+                lastStepPrediction.dispose();
+            }
+            
+            // 释放资源
+            model.dispose();
+            inputTensor.dispose();
+            
+            // 返回结果
+            const result = {
+                status: "success",
+                result: generatedSequence,
+                seed: seed,
+                length: length,
+                model: modelPath,
+                timestamp: new Date().toISOString()
+            };
+            
+            document.write(JSON.stringify(result, null, 2));
+            
+        } catch (error) {
+            // 错误处理
+            const errorResult = {
+                status: "error",
+                message: error.message,
+                timestamp: new Date().toISOString()
+            };
+            
+            document.write(JSON.stringify(errorResult, null, 2));
+        }
+    })();
+</script>
 </body>
 </html>
