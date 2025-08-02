@@ -1,109 +1,188 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
- <meta charset="UTF-8">
- <meta name="viewport" content="width=device-width, initial-scale=1.0">
- <title>字符序列预测API</title>
- <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cross-Origin-Opener-Policy" content="same-origin">
+    <meta http-equiv="Cross-Origin-Embedder-Policy" content="require-corp">
+    <title>字符序列预测API</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
 </head>
 <body>
- <script>
- // --- 全局变量和常量 ---
- const charToIndex = {'A': 0, 'B': 1, 'C': 2}; // 根据实际字符集调整
- const indexToChar = {0: 'A', 1: 'B', 2: 'C'}; // 根据实际字符集调整
- const VOCAB_SIZE = 3;
- const PADDING_CHAR = 'A';
- let model = null;
- let loadedModelSequenceLength = 0;
+    <script>
+        // --- 全局变量和常量 ---
+        const charToIndex = {'A': 0, 'B': 1, 'C': 2};
+        const indexToChar = {0: 'A', 1: 'B', 2: 'C'};
+        const VOCAB_SIZE = 3;
+        const PADDING_CHAR = 'A';
+        let model = null;
 
- // 解析URL参数
- function getUrlParams() {
-   const params = {};
-   window.location.search.substring(1).split('&').forEach(param => {
-     const keyValue = param.split('=');
-     if (keyValue[0]) params[decodeURIComponent(keyValue[0])] = decodeURIComponent(keyValue[1]) || '';
-   });
-   return params;
- }
+        // 解析URL参数
+        function getUrlParams() {
+            const params = {};
+            const queryString = window.location.search.substring(1);
+            console.log("查询字符串:", queryString);
+            
+            if (!queryString) {
+                console.error("缺少查询参数");
+                return null;
+            }
+            
+            const regex = /([^&=]+)=([^&]*)/g;
+            let m;
+            while (m = regex.exec(queryString)) {
+                params[decodeURIComponent(m[1])] = decodeURIComponent(m[2]);
+            }
+            console.log("解析的参数:", params);
+            return params;
+        }
 
- // 准备输入序列
- function prepareInputSequence(rawSeedSequence) {
-   // 根据模型需求处理输入序列
-   return rawSeedSequence.padEnd(loadedModelSequenceLength, PADDING_CHAR);
- }
+        // 加载模型
+        async function loadModel() {
+            try {
+                console.log("开始加载模型...");
+                model = await tf.loadLayersModel('./models/trained-abc-multi-seq-model/model.json');
+                
+                // 验证模型结构
+                console.log("模型输入形状:", model.inputs[0].shape);
+                console.log("模型输出形状:", model.outputs[0].shape);
+                
+                // 测试预测
+                const testInput = tf.tensor3d([[[0]]], [1, 1, 1]);
+                const testOutput = model.predict(testInput);
+                console.log("测试预测结果:", testOutput.dataSync());
+                testInput.dispose();
+                testOutput.dispose();
+                
+                return true;
+            } catch (error) {
+                console.error("模型加载失败:", error);
+                document.body.innerText = JSON.stringify({
+                    status: "error",
+                    message: "模型加载失败: " + error.message
+                }, null, 2);
+                return false;
+            }
+        }
 
- // 生成序列
- async function generateSequence(seedSequence, generateLength) {
-   const inputSequence = prepareInputSequence(seedSequence);
-   let generatedSequence = seedSequence;
-   for (let i = 0; i < generateLength; i++) {
-     const inputTensor = tf.tensor([inputSequence.split('').map(c => charToIndex[c])]);
-     const prediction = model.predict(inputTensor);
-     const predictedCharIndex = tf.argMax(prediction, 1).dataSync()[0];
-     const predictedChar = indexToChar[predictedCharIndex];
-     generatedSequence += predictedChar;
-     inputSequence.shift(); // 移除第一个字符
-     inputSequence.push(predictedChar); // 添加新预测的字符
-   }
-   return generatedSequence;
- }
+        // 将字符串序列转换为索引数组
+        function sequenceToIndices(sequence) {
+            return sequence.split('').map(char => {
+                if (charToIndex[char] === undefined) {
+                    throw new Error(`无效字符: ${char}`);
+                }
+                return charToIndex[char];
+            });
+        }
 
- // 加载模型
- async function loadModel() {
-   model = await tf.loadLayersModel('path/to/model.json');
-   // 假设模型序列长度存储在模型的某个属性中，需要根据实际情况获取
-   loadedModelSequenceLength = model.sequenceLength || 4; // 示例值，根据实际情况调整
- }
+        // 将索引数组转换为字符串
+        function indicesToSequence(indices) {
+            return indices.map(index => indexToChar[index]).join('');
+        }
 
- // 主函数
- async function main() {
-   const params = getUrlParams();
-   if (!params.sequence) {
-     document.body.textContent = JSON.stringify({
-       "error": true,
-       "message": "缺少必需参数: sequence",
-       "code": 400,
-       "timestamp": new Date().toISOString()
-     });
-     return;
-   }
+        // 预测函数
+        async function predict(sequence, length) {
+            try {
+                if (!model) {
+                    throw new Error('模型未加载');
+                }
 
-   const rawSeedSequence = params.sequence;
-   const generateLength = parseInt(params.length, 10) || 10; // 默认生成长度为10
+                // 验证输入序列
+                if (!sequence || sequence.length === 0) {
+                    throw new Error('输入序列不能为空');
+                }
 
-   if (generateLength < 1 || generateLength > 200) {
-     document.body.textContent = JSON.stringify({
-       "error": true,
-       "message": "生成长度必须在1到200之间",
-       "code": 400,
-       "timestamp": new Date().toISOString()
-     });
-     return;
-   }
+                // 验证生成长度
+                if (length < 1 || length > 200) {
+                    throw new Error('生成长度必须在1到200之间');
+                }
 
-   await loadModel();
+                // 转换输入序列为索引
+                let inputIndices = sequenceToIndices(sequence);
+                let currentSequence = [...inputIndices];
+                console.log("输入序列索引:", currentSequence);
 
-   try {
-     const generatedSequence = await generateSequence(rawSeedSequence, generateLength);
-     document.body.textContent = JSON.stringify({
-       "inputSequence": rawSeedSequence,
-       "processedSequence": prepareInputSequence(rawSeedSequence),
-       "generatedSequence": generatedSequence,
-       "generatedLength": generateLength,
-       "modelSequenceLength": loadedModelSequenceLength,
-       "timestamp": new Date().toISOString()
-     });
-   } catch (error) {
-     document.body.textContent = JSON.stringify({
-       "error": true,
-       "message": error.message,
-       "code": 500,
-       "timestamp": new Date().toISOString()
-     });
-   }
- }
+                // 逐步生成序列
+                for (let i = 0; i < length; i++) {
+                    // 准备输入数据，形状为 [1, sequence_length, 1]
+                    const inputTensor = tf.tensor3d([currentSequence], [1, currentSequence.length, 1]);
 
- main();
- </script>
+                    // 预测下一个字符
+                    const prediction = model.predict(inputTensor);
+                    const predictedIndex = prediction.argMax(-1).dataSync()[0];
+                    console.log(`步骤 ${i+1}: 预测索引 = ${predictedIndex}`);
+
+                    // 将预测的索引添加到当前序列
+                    currentSequence.push(predictedIndex);
+
+                    // 释放张量内存
+                    inputTensor.dispose();
+                    prediction.dispose();
+                }
+
+                // 跳过输入序列部分，只返回生成的部分
+                const generatedIndices = currentSequence.slice(sequence.length);
+                return indicesToSequence(generatedIndices);
+            } catch (error) {
+                console.error('预测过程中出错:', error);
+                throw error;
+            }
+        }
+
+        // 主函数
+        async function main() {
+            try {
+                // 获取URL参数
+                const params = getUrlParams();
+                if (!params) {
+                    throw new Error('缺少查询参数');
+                }
+
+                const sequence = params.sequence;
+                const length = parseInt(params.length, 10);
+
+                // 验证参数
+                if (!sequence) {
+                    throw new Error('缺少sequence参数');
+                }
+                if (isNaN(length)) {
+                    throw new Error('length参数必须是数字');
+                }
+
+                console.log("输入序列:", sequence);
+                console.log("生成长度:", length);
+
+                // 加载模型
+                const modelLoaded = await loadModel();
+                if (!modelLoaded) {
+                    throw new Error('模型加载失败');
+                }
+
+                // 执行预测
+                const result = await predict(sequence, length);
+                console.log("预测结果:", result);
+
+                // 输出结果
+                const response = {
+                    status: 'success',
+                    input: sequence,
+                    length: length,
+                    result: result
+                };
+                document.body.innerText = JSON.stringify(response, null, 2);
+            } catch (error) {
+                console.error('主函数出错:', error);
+                // 输出错误信息
+                const errorResponse = {
+                    status: 'error',
+                    message: error.message
+                };
+                document.body.innerText = JSON.stringify(errorResponse, null, 2);
+            }
+        }
+
+        // 页面加载完成后执行
+        window.addEventListener('load', main);
+    </script>
 </body>
 </html>
