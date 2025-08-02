@@ -19,118 +19,96 @@
             case 'A': return [1, 0, 0];
             case 'B': return [0, 1, 0];
             case 'C': return [0, 0, 1];
-            default: return [0, 0, 0]; // 无效字符
+            default: throw new Error(`无效字符: ${char}`);
         }
     }
 
-    // 预处理输入序列
-    function preprocessInput(inputString) {
-        // 验证输入
-        if (!inputString) {
-            throw new Error("缺少输入序列参数");
-        }
-        
-        // 检查字符有效性
-        if (!/^[ABC]+$/.test(inputString)) {
-            throw new Error("输入序列只能包含A、B、C字符");
-        }
-        
-        // 转换为one-hot编码
-        const inputArray = [];
-        for (let i = 0; i < inputString.length; i++) {
-            inputArray.push(charToOneHot(inputString[i]));
-        }
-        
-        return inputArray;
-    }
-
-    // 从预测结果中获取字符
-    function getCharFromPrediction(prediction) {
-        // 获取概率最大的索引
-        const maxIndex = prediction.indexOf(Math.max(...prediction));
-        return ['A', 'B', 'C'][maxIndex];
+    // one-hot编码转字符
+    function oneHotToChar(oneHot) {
+        const index = oneHot.indexOf(Math.max(...oneHot));
+        return ['A', 'B', 'C'][index];
     }
 
     // 主函数
     async function main() {
         try {
             // 获取参数
-            const seed = getUrlParameter('seed') || '';
-            const length = parseInt(getUrlParameter('length')) || 10;
+            const seed = getUrlParameter('seed') || 'A';
+            const length = parseInt(getUrlParameter('length')) || 5;
             const modelPath = getUrlParameter('model') || 'model.json';
             
-            // 预处理输入
-            const inputArray = preprocessInput(seed);
+            // 验证输入
+            if (!/^[ABC]+$/.test(seed)) {
+                throw new Error("输入序列只能包含A、B、C字符");
+            }
             
             // 加载模型
             const model = await tf.loadLayersModel(modelPath);
+            console.log("模型加载成功");
             
-            // 准备输入张量
-            const inputTensor = tf.tensor([inputArray], [1, inputArray.length, 3]);
+            // 生成序列
+            let sequence = seed.split('');
+            const result = [...sequence];
             
-            // 预测
-            const prediction = model.predict(inputTensor);
-            
-            // 获取最后一个时间步的预测结果
-            // 修正维度问题：使用squeeze去除大小为1的维度
-            const lastStepPrediction = prediction.slice([0, inputArray.length - 1, 0], [1, 1, 3]).squeeze();
-            
-            // 转换为数组
-            const probabilities = await lastStepPrediction.array();
-            
-            // 获取预测字符
-            const nextChar = getCharFromPrediction(probabilities);
-            
-            // 生成结果序列
-            let result = seed + nextChar;
-            
-            // 继续生成剩余字符
-            for (let i = 1; i < length; i++) {
-                // 更新输入数组（移除第一个字符，添加新字符）
-                inputArray.shift();
-                inputArray.push(charToOneHot(nextChar));
+            for (let i = 0; i < length; i++) {
+                // 准备输入数据
+                const inputArray = sequence.map(char => charToOneHot(char));
+                const inputTensor = tf.tensor([inputArray]); // 形状: [1, sequence_length, 3]
                 
-                // 重新准备输入张量
-                const newInputTensor = tf.tensor([inputArray], [1, inputArray.length, 3]);
+                // 进行预测
+                const prediction = model.predict(inputTensor);
                 
-                // 预测
-                const newPrediction = model.predict(newInputTensor);
+                // 检查预测输出的形状
+                console.log("预测输出形状:", prediction.shape);
                 
-                // 获取最后一个时间步的预测结果
-                const newLastStepPrediction = newPrediction.slice([0, inputArray.length - 1, 0], [1, 1, 3]).squeeze();
+                // 处理预测结果
+                let predictedChar;
                 
-                // 转换为数组
-                const newProbabilities = await newLastStepPrediction.array();
-                
-                // 获取预测字符
-                nextChar = getCharFromPrediction(newProbabilities);
+                if (prediction.rank === 3) {
+                    // 如果输出是3维的 [batch_size, sequence_length, features]
+                    // 取最后一个时间步的输出
+                    const lastStepOutput = prediction.slice([0, prediction.shape[1]-1, 0], [1, 1, -1]).squeeze();
+                    predictedChar = oneHotToChar(Array.from(lastStepOutput.dataSync()));
+                } else if (prediction.rank === 2) {
+                    // 如果输出是2维的 [batch_size, features]
+                    // 直接使用整个输出
+                    const output = prediction.squeeze();
+                    predictedChar = oneHotToChar(Array.from(output.dataSync()));
+                } else {
+                    throw new Error(`不支持的预测输出维度: ${prediction.rank}`);
+                }
                 
                 // 添加到结果
-                result += nextChar;
+                result.push(predictedChar);
+                
+                // 更新序列（移除第一个字符，添加预测字符）
+                sequence.shift();
+                sequence.push(predictedChar);
+                
+                // 释放张量内存
+                prediction.dispose();
+                inputTensor.dispose();
             }
             
-            // 返回成功响应
+            // 返回结果
             const response = {
                 status: "success",
-                result: result,
+                result: result.join(''),
                 seed: seed,
                 length: length,
                 model: modelPath,
                 timestamp: new Date().toISOString()
             };
             
-            // 输出JSON响应
             document.body.innerHTML = `<pre>${JSON.stringify(response, null, 2)}</pre>`;
             
         } catch (error) {
-            // 返回错误响应
+            console.error("错误:", error);
             const response = {
                 status: "error",
                 message: error.message,
                 timestamp: new Date().toISOString()
             };
-            
-            // 输出JSON响应
             document.body.innerHTML = `<pre>${JSON.stringify(response, null, 2)}</pre>`;
         }
     }
