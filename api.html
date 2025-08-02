@@ -2,8 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>序列预测API</title>
-    <!-- 加载TensorFlow.js -->
+    <title>字符序列预测API</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
 </head>
 <body>
@@ -22,69 +21,121 @@
             return params;
         }
 
+        // 字符到数字的映射
+        const charToNum = { 'A': 0, 'B': 1, 'C': 2 };
+        const numToChar = ['A', 'B', 'C'];
+
+        // 预处理输入序列
+        function preprocessInput(inputString, sequenceLength) {
+            // 验证输入
+            if (!/^[ABC]+$/.test(inputString)) {
+                throw new Error("输入序列只能包含A、B、C字符");
+            }
+
+            // 转换为数字序列
+            let numSequence = inputString.split('').map(char => charToNum[char]);
+            
+            // 调整数组长度到sequenceLength
+            if (numSequence.length > sequenceLength) {
+                numSequence = numSequence.slice(0, sequenceLength);
+            } else if (numSequence.length < sequenceLength) {
+                // 填充0（代表A）到指定长度
+                numSequence = numSequence.concat(Array(sequenceLength - numSequence.length).fill(0));
+            }
+
+            // 转换为one-hot编码
+            const oneHotSequence = numSequence.map(num => {
+                const arr = new Array(3).fill(0);
+                arr[num] = 1;
+                return arr;
+            });
+
+            // 创建3D张量 [1, sequenceLength, 3]
+            return tf.tensor3d([oneHotSequence], [1, sequenceLength, 3]);
+        }
+
         // 主函数
         async function main() {
             try {
-                // 获取URL参数
+                // 解析URL参数
                 const params = getUrlParams();
-                const inputSequence = params.input || '';
+                const inputString = params.input || '';
                 
-                // 验证输入
-                if (!inputSequence) {
-                    throw new Error('缺少必需参数: input');
+                if (!inputString) {
+                    throw new Error("请提供输入参数，例如: ?input=ABC");
                 }
-                
-                // 验证输入序列格式
-                if (!/^[ABC]+$/.test(inputSequence)) {
-                    throw new Error('输入序列只能包含A、B、C字符');
-                }
-                
+
                 // 加载模型
-                console.log('正在加载模型...');
                 const model = await tf.loadLayersModel('./model.json');
-                console.log('模型加载成功');
+                console.log("模型加载成功");
+
+                // 获取模型输入形状
+                const inputShape = model.inputs[0].shape;
+                if (inputShape.length !== 3) {
+                    throw new Error(`模型输入形状应为3维，但得到的是${inputShape.length}维`);
+                }
                 
-                // 准备输入数据
-                // 将ABC转换为数值: A=0, B=1, C=2
-                const numericalInput = inputSequence.split('').map(char => {
-                    return char === 'A' ? 0 : char === 'B' ? 1 : 2;
-                });
+                const sequenceLength = inputShape[1];
+                const numFeatures = inputShape[2];
+
+                if (sequenceLength === null) {
+                    throw new Error('模型输入形状的第二维（序列长度）为null，无法确定固定长度');
+                }
                 
-                // 创建张量 (形状: [batchSize, sequenceLength])
-                const inputTensor = tf.tensor2d([numericalInput], [1, numericalInput.length]);
-                
+                if (numFeatures !== 3) {
+                    throw new Error(`模型输入形状的第三维（特征数）应为3，但得到的是${numFeatures}`);
+                }
+
+                console.log(`模型期望输入形状: [1, ${sequenceLength}, ${numFeatures}]`);
+
+                // 预处理输入
+                const inputTensor = preprocessInput(inputString, sequenceLength);
+                console.log("输入张量形状:", inputTensor.shape);
+
                 // 进行预测
-                console.log('正在进行预测...');
                 const prediction = model.predict(inputTensor);
                 const predictionData = await prediction.data();
                 
-                // 将预测结果转换为ABC
-                const result = predictionData.map(val => {
-                    const index = Math.round(val);
-                    return index === 0 ? 'A' : index === 1 ? 'B' : 'C';
-                }).join('');
+                // 找到概率最高的字符
+                let maxProb = -1;
+                let predictedIndex = -1;
+                for (let i = 0; i < predictionData.length; i++) {
+                    if (predictionData[i] > maxProb) {
+                        maxProb = predictionData[i];
+                        predictedIndex = i;
+                    }
+                }
                 
-                // 返回JSON结果
-                const response = {
-                    status: 'success',
-                    input: inputSequence,
-                    prediction: result,
+                const predictedChar = numToChar[predictedIndex];
+
+                // 输出结果
+                const result = {
+                    status: "success",
+                    input: inputString,
+                    sequenceLength: sequenceLength,
+                    prediction: predictedChar,
+                    probabilities: {
+                        'A': predictionData[0],
+                        'B': predictionData[1],
+                        'C': predictionData[2]
+                    },
                     timestamp: new Date().toISOString()
                 };
                 
-                // 输出JSON响应
-                document.body.innerHTML = `<pre>${JSON.stringify(response, null, 2)}</pre>`;
+                document.body.innerText = JSON.stringify(result, null, 2);
+                
+                // 释放内存
+                inputTensor.dispose();
+                prediction.dispose();
                 
             } catch (error) {
-                // 错误处理
-                const errorResponse = {
-                    status: 'error',
+                const errorResult = {
+                    status: "error",
                     message: error.message,
                     timestamp: new Date().toISOString()
                 };
-                
-                document.body.innerHTML = `<pre>${JSON.stringify(errorResponse, null, 2)}</pre>`;
-                console.error('API错误:', error);
+                document.body.innerText = JSON.stringify(errorResult, null, 2);
+                console.error("预测失败:", error);
             }
         }
 
