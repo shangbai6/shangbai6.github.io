@@ -23,110 +23,120 @@
         }
     }
 
-    // 将索引转换为字符
-    function indexToChar(index) {
-        const chars = ['A', 'B', 'C'];
-        return chars[index] || '';
-    }
-
     // 预处理输入序列
     function preprocessInput(inputString) {
         // 验证输入
-        if (!inputString || !/^[ABC]+$/.test(inputString)) {
-            throw new Error('输入序列只能包含A、B、C字符');
+        if (!inputString) {
+            throw new Error("缺少输入序列参数");
+        }
+        
+        // 检查字符有效性
+        if (!/^[ABC]+$/.test(inputString)) {
+            throw new Error("输入序列只能包含A、B、C字符");
         }
         
         // 转换为one-hot编码
-        const oneHotArray = [];
+        const inputArray = [];
         for (let i = 0; i < inputString.length; i++) {
-            oneHotArray.push(charToOneHot(inputString[i]));
+            inputArray.push(charToOneHot(inputString[i]));
         }
         
-        // 创建张量 [batch_size=1, sequence_length, features=3]
-        return tf.tensor([oneHotArray]);
+        return inputArray;
+    }
+
+    // 从预测结果中获取字符
+    function getCharFromPrediction(prediction) {
+        // 获取概率最大的索引
+        const maxIndex = prediction.indexOf(Math.max(...prediction));
+        return ['A', 'B', 'C'][maxIndex];
     }
 
     // 主函数
-    (async function() {
+    async function main() {
         try {
             // 获取参数
-            const modelPath = getUrlParameter('model') || 'model.json';
-            const seed = getUrlParameter('seed');
+            const seed = getUrlParameter('seed') || '';
             const length = parseInt(getUrlParameter('length')) || 10;
-            
-            // 验证参数
-            if (!seed) {
-                throw new Error('缺少必需参数: seed');
-            }
-            if (isNaN(length) || length <= 0) {
-                throw new Error('参数length必须是正整数');
-            }
-            
-            // 加载模型
-            console.log('正在加载模型:', modelPath);
-            const model = await tf.loadLayersModel(modelPath);
-            console.log('模型加载成功');
+            const modelPath = getUrlParameter('model') || 'model.json';
             
             // 预处理输入
-            const inputTensor = preprocessInput(seed);
+            const inputArray = preprocessInput(seed);
             
-            // 生成序列
-            let generatedSequence = seed;
-            let currentSequence = seed;
+            // 加载模型
+            const model = await tf.loadLayersModel(modelPath);
             
-            for (let i = 0; i < length; i++) {
-                // 预测下一个字符
-                const prediction = model.predict(inputTensor);
-                const lastStepPrediction = prediction.slice([0, currentSequence.length-1, 0], [1, 1, 3]).reshape([3]);
-                const predictedIndex = lastStepPrediction.argMax().dataSync()[0];
-                const predictedChar = indexToChar(predictedIndex);
+            // 准备输入张量
+            const inputTensor = tf.tensor([inputArray], [1, inputArray.length, 3]);
+            
+            // 预测
+            const prediction = model.predict(inputTensor);
+            
+            // 获取最后一个时间步的预测结果
+            // 修正维度问题：使用squeeze去除大小为1的维度
+            const lastStepPrediction = prediction.slice([0, inputArray.length - 1, 0], [1, 1, 3]).squeeze();
+            
+            // 转换为数组
+            const probabilities = await lastStepPrediction.array();
+            
+            // 获取预测字符
+            const nextChar = getCharFromPrediction(probabilities);
+            
+            // 生成结果序列
+            let result = seed + nextChar;
+            
+            // 继续生成剩余字符
+            for (let i = 1; i < length; i++) {
+                // 更新输入数组（移除第一个字符，添加新字符）
+                inputArray.shift();
+                inputArray.push(charToOneHot(nextChar));
                 
-                // 添加到生成序列
-                generatedSequence += predictedChar;
+                // 重新准备输入张量
+                const newInputTensor = tf.tensor([inputArray], [1, inputArray.length, 3]);
                 
-                // 更新当前序列（移除第一个字符，添加新字符）
-                currentSequence = currentSequence.substring(1) + predictedChar;
+                // 预测
+                const newPrediction = model.predict(newInputTensor);
                 
-                // 更新输入张量
-                inputTensor.dispose();
-                const newInput = [];
-                for (let j = 0; j < currentSequence.length; j++) {
-                    newInput.push(charToOneHot(currentSequence[j]));
-                }
-                inputTensor = tf.tensor([newInput]);
+                // 获取最后一个时间步的预测结果
+                const newLastStepPrediction = newPrediction.slice([0, inputArray.length - 1, 0], [1, 1, 3]).squeeze();
                 
-                // 释放内存
-                prediction.dispose();
-                lastStepPrediction.dispose();
+                // 转换为数组
+                const newProbabilities = await newLastStepPrediction.array();
+                
+                // 获取预测字符
+                nextChar = getCharFromPrediction(newProbabilities);
+                
+                // 添加到结果
+                result += nextChar;
             }
             
-            // 释放资源
-            model.dispose();
-            inputTensor.dispose();
-            
-            // 返回结果
-            const result = {
+            // 返回成功响应
+            const response = {
                 status: "success",
-                result: generatedSequence,
+                result: result,
                 seed: seed,
                 length: length,
                 model: modelPath,
                 timestamp: new Date().toISOString()
             };
             
-            document.write(JSON.stringify(result, null, 2));
+            // 输出JSON响应
+            document.body.innerHTML = `<pre>${JSON.stringify(response, null, 2)}</pre>`;
             
         } catch (error) {
-            // 错误处理
-            const errorResult = {
+            // 返回错误响应
+            const response = {
                 status: "error",
                 message: error.message,
                 timestamp: new Date().toISOString()
             };
             
-            document.write(JSON.stringify(errorResult, null, 2));
+            // 输出JSON响应
+            document.body.innerHTML = `<pre>${JSON.stringify(response, null, 2)}</pre>`;
         }
-    })();
+    }
+
+    // 执行主函数
+    main();
 </script>
 </body>
 </html>
