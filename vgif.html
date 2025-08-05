@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频转 GIF 工具 (纯客户端)</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            margin: 0;
+            padding: 2rem;
+            min-height: 100vh;
+        }
+
+        .container {
+            background-color: #fff;
+            padding: 2.5rem;
+            border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 650px;
+            box-sizing: border-box;
+        }
+
+        h1 {
+            text-align: center;
+            color: #1a2a45;
+            margin-top: 0;
+            margin-bottom: 2rem;
+        }
+
+        .section {
+            margin-bottom: 2rem;
+        }
+
+        .section-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 1.5rem;
+        }
+        
+        .control-group label {
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+        }
+
+        input[type="file"], input[type="number"], input[type="range"] {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+
+        input[type="file"] {
+            padding: 0.5rem;
+        }
+
+        input[type="range"] {
+            padding: 0;
+        }
+
+        .range-value {
+            font-weight: bold;
+            color: #007bff;
+        }
+
+        button {
+            width: 100%;
+            padding: 1rem;
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #fff;
+            background: linear-gradient(45deg, #007bff, #0056b3);
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        button:disabled {
+            background: #aab8c2;
+            cursor: not-allowed;
+        }
+        
+        button:not(:disabled):hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
+        }
+
+        #status {
+            margin-top: 1.5rem;
+            text-align: center;
+            font-weight: 500;
+            height: 24px;
+        }
+        
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 4px solid #3498db;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        progress {
+            width: 100%;
+            height: 12px;
+            border-radius: 6px;
+            display: none; /* Hidden by default */
+        }
+        
+        progress::-webkit-progress-bar {
+            background-color: #e9ecef;
+            border-radius: 6px;
+        }
+
+        progress::-webkit-progress-value {
+            background-color: #007bff;
+            border-radius: 6px;
+            transition: width 0.2s ease;
+        }
+
+        #output {
+            margin-top: 2rem;
+            text-align: center;
+        }
+
+        #gifImage {
+            max-width: 100%;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        #downloadLink {
+            display: inline-block;
+            padding: 0.8rem 1.5rem;
+            font-size: 1rem;
+            font-weight: bold;
+            color: #fff;
+            background-color: #28a745;
+            border-radius: 6px;
+            text-decoration: none;
+            transition: background-color 0.3s;
+        }
+
+        #downloadLink:hover {
+            background-color: #218838;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>视频转 GIF 工具</h1>
+
+        <div class="section">
+            <h2 class="section-title">1. 上传视频文件</h2>
+            <div class="control-group">
+                <input type="file" id="videoUpload" accept="video/*">
+            </div>
+        </div>
+
+        <div class="section">
+            <h2 class="section-title">2. 设置压缩选项</h2>
+            <div class="control-group">
+                <label for="gifWidth">GIF 宽度 (px) - 高度将自动缩放</label>
+                <input type="number" id="gifWidth" value="480">
+            </div>
+            <div class="control-group">
+                <label for="fps">帧率 (FPS) - 推荐 10-15</label>
+                <input type="number" id="fps" value="12" min="1" max="60">
+            </div>
+            <div class="control-group">
+                <label for="quality">质量 (1=低, 10=高) - <span id="qualityValue" class="range-value">7</span></label>
+                <input type="range" id="quality" min="1" max="10" value="7">
+            </div>
+        </div>
+
+        <button id="convertBtn" disabled>选择视频后开始转换</button>
+
+        <div id="status"></div>
+        <progress id="progressBar" value="0" max="1"></progress>
+
+        <div id="output" style="display: none;">
+            <h2 class="section-title">转换结果</h2>
+            <img id="gifImage" src="" alt="Generated GIF">
+            <br>
+            <a id="downloadLink" href="#" download="converted.gif">下载 GIF</a>
+        </div>
+    </div>
+
+    <!-- 加载 ffmpeg.wasm -->
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
+    <script>
+        const { createFFMPEG, fetchFile } = FFmpeg;
+        let ffmpeg;
+
+        // DOM 元素引用
+        const videoUpload = document.getElementById('videoUpload');
+        const convertBtn = document.getElementById('convertBtn');
+        const statusEl = document.getElementById('status');
+        const progressBar = document.getElementById('progressBar');
+        const outputDiv = document.getElementById('output');
+        const gifImage = document.getElementById('gifImage');
+        const downloadLink = document.getElementById('downloadLink');
+        const qualitySlider = document.getElementById('quality');
+        const qualityValue = document.getElementById('qualityValue');
+
+        // 初始化
+        async function initialize() {
+            statusEl.innerHTML = '<div class="loader"></div>正在加载 FFmpeg.wasm 核心 (首次加载约30MB)...';
+            ffmpeg = createFFMPEG({
+                log: true, // 在控制台输出详细日志，方便调试
+                corePath: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',
+            });
+            await ffmpeg.load();
+            statusEl.textContent = '准备就绪，请上传视频文件。';
+        }
+        initialize();
+
+        // 事件监听
+        videoUpload.addEventListener('change', () => {
+            if (videoUpload.files.length > 0) {
+                convertBtn.disabled = false;
+                convertBtn.textContent = '开始转换';
+                outputDiv.style.display = 'none';
+            }
+        });
+
+        qualitySlider.addEventListener('input', (e) => {
+            qualityValue.textContent = e.target.value;
+        });
+
+        convertBtn.addEventListener('click', async () => {
+            const file = videoUpload.files[0];
+            if (!file) {
+                alert('请先选择一个视频文件！');
+                return;
+            }
+
+            // 获取用户设置
+            const width = document.getElementById('gifWidth').value;
+            const fps = document.getElementById('fps').value;
+            const quality = qualitySlider.value;
+            
+            // 计算dither算法，质量越高，dither效果越好
+            // bayer 算法速度快但效果一般，sierra2_4a 效果更好
+            const dither = quality > 6 ? 'sierra2_4a' : 'bayer';
+
+            try {
+                // UI 更新 - 开始处理
+                setLoadingState(true, '正在读取文件...');
+                
+                const inputFileName = 'input.mp4'; // ffmpeg 虚拟文件系统中的文件名
+                const outputFileName = 'output.gif';
+                const paletteFileName = 'palette.png';
+
+                // 将文件写入 ffmpeg 的虚拟文件系统
+                ffmpeg.FS('writeFile', inputFileName, await fetchFile(file));
+
+                // 监听进度
+                ffmpeg.setProgress(({ ratio }) => {
+                    progressBar.style.display = 'block';
+                    progressBar.value = ratio;
+                    statusEl.textContent = `转换中... (${Math.round(ratio * 100)}%)`;
+                });
+
+                // --- FFMPEG 命令 - 两步法生成高质量 GIF ---
+                
+                // 步骤 1: 生成调色板 (palettegen)
+                // -vf: 视频滤镜链
+                // fps=${fps}: 设置帧率
+                // scale=${width}:-1:flags=lanczos: 设置宽度，高度自适应，使用高质量缩放算法
+                // palettegen: 生成一个代表视频最佳颜色的256色调色板
+                statusEl.textContent = '步骤 1/2: 正在生成优化调色板...';
+                const palettegenFilter = `fps=${fps},scale=${width}:-1:flags=lanczos,palettegen`;
+                await ffmpeg.run('-i', inputFileName, '-vf', palettegenFilter, paletteFileName);
+
+                // 步骤 2: 使用调色板生成 GIF (paletteuse)
+                // -i palette.png: 将生成的调色板作为第二个输入
+                // -lavfi: 复杂的滤镜图
+                // [0:v]: 第一个输入的视频流
+                // [1:v]: 第二个输入的视频流 (即调色板)
+                // paletteuse=dither=${dither}: 使用调色板，并应用抖动算法以减少色带
+                statusEl.textContent = '步骤 2/2: 正在使用调色板生成 GIF...';
+                const paletteuseFilter = `[0:v]fps=${fps},scale=${width}:-1:flags=lanczos[x];[x][1:v]paletteuse=dither=${dither}`;
+                await ffmpeg.run('-i', inputFileName, '-i', paletteFileName, '-lavfi', paletteuseFilter, outputFileName);
+                
+                // 从虚拟文件系统读取结果
+                const data = ffmpeg.FS('readFile', outputFileName);
+
+                // 创建 Blob URL 并显示结果
+                const gifUrl = URL.createObjectURL(new Blob([data.buffer], { type: 'image/gif' }));
+                gifImage.src = gifUrl;
+                downloadLink.href = gifUrl;
+                outputDiv.style.display = 'block';
+
+                statusEl.textContent = '转换完成！';
+
+            } catch (error) {
+                console.error(error);
+                statusEl.textContent = `转换失败: ${error.message || '未知错误'}`;
+            } finally {
+                // UI 更新 - 结束处理
+                setLoadingState(false);
+            }
+        });
+        
+        function setLoadingState(isLoading, message = '') {
+            convertBtn.disabled = isLoading;
+            videoUpload.disabled = isLoading;
+            if (isLoading) {
+                convertBtn.textContent = '处理中...';
+                statusEl.innerHTML = `<div class="loader"></div>${message}`;
+                progressBar.style.display = 'block';
+                progressBar.value = 0;
+                outputDiv.style.display = 'none';
+            } else {
+                convertBtn.textContent = '开始转换';
+                progressBar.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>
