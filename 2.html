@@ -1,0 +1,425 @@
+import React, { useState, useEffect } from 'react';
+import { Swords, Shield, Heart, Zap, Brain, Target, Book, Music } from 'lucide-react';
+
+// 命途定义
+const PATHS = {
+  destruction: { name: '毁灭', icon: Swords, color: 'text-red-600', bg: 'bg-red-100', desc: '造成3点伤害' },
+  preservation: { name: '存护', icon: Shield, color: 'text-blue-600', bg: 'bg-blue-100', desc: '获得5点护盾' },
+  abundance: { name: '丰饶', icon: Heart, color: 'text-green-600', bg: 'bg-green-100', desc: '恢复4点生命' },
+  nihility: { name: '虚无', icon: Zap, color: 'text-purple-600', bg: 'bg-purple-100', desc: '对手失去1点命途进度' },
+  erudition: { name: '智识', icon: Brain, color: 'text-yellow-600', bg: 'bg-yellow-100', desc: '抽2张牌' },
+  hunt: { name: '巡猎', icon: Target, color: 'text-orange-600', bg: 'bg-orange-100', desc: '造成2点伤害两次' },
+  remembrance: { name: '记忆', icon: Book, color: 'text-indigo-600', bg: 'bg-indigo-100', desc: '从弃牌堆回收1张牌' },
+  harmony: { name: '同谐', icon: Music, color: 'text-pink-600', bg: 'bg-pink-100', desc: '所有命途+1进度' }
+};
+
+// 卡牌等级
+const CARD_RANKS = {
+  walker: { name: '命途行者', power: 1, color: 'border-gray-400' },
+  emanator: { name: '令使', power: 2, color: 'border-purple-500' },
+  aeon: { name: '星神', power: 3, color: 'border-yellow-500' }
+};
+
+const Game = () => {
+  const [gameState, setGameState] = useState('select'); // select, playing, end
+  const [selectedPath, setSelectedPath] = useState(null);
+  const [player, setPlayer] = useState({ hp: 30, shield: 0, paths: {}, hand: [], deck: [], discard: [] });
+  const [enemy, setEnemy] = useState({ hp: 30, shield: 0, paths: {}, hand: [], deck: [], discard: [] });
+  const [turn, setTurn] = useState('player');
+  const [message, setMessage] = useState('');
+  const [winner, setWinner] = useState(null);
+
+  // 初始化牌组
+  const initDeck = () => {
+    const deck = [];
+    const pathKeys = Object.keys(PATHS);
+    
+    // 每个命途各3张不同等级的牌
+    pathKeys.forEach(path => {
+      deck.push({ path, rank: 'aeon', id: Math.random() });
+      deck.push({ path, rank: 'emanator', id: Math.random() });
+      deck.push({ path, rank: 'emanator', id: Math.random() });
+      deck.push({ path, rank: 'walker', id: Math.random() });
+      deck.push({ path, rank: 'walker', id: Math.random() });
+    });
+    
+    return deck.sort(() => Math.random() - 0.5);
+  };
+
+  // 抽牌
+  const drawCard = (playerState) => {
+    if (playerState.deck.length === 0) {
+      if (playerState.discard.length === 0) return playerState;
+      playerState.deck = [...playerState.discard].sort(() => Math.random() - 0.5);
+      playerState.discard = [];
+    }
+    
+    const card = playerState.deck.pop();
+    playerState.hand.push(card);
+    return { ...playerState };
+  };
+
+  // 开始游戏
+  const startGame = (path) => {
+    setSelectedPath(path);
+    
+    const playerDeck = initDeck();
+    const enemyDeck = initDeck();
+    
+    let newPlayer = { 
+      hp: 30, 
+      shield: 0, 
+      paths: Object.keys(PATHS).reduce((acc, p) => ({ ...acc, [p]: 0 }), {}),
+      hand: [],
+      deck: playerDeck,
+      discard: []
+    };
+    
+    let newEnemy = { 
+      hp: 30, 
+      shield: 0, 
+      paths: Object.keys(PATHS).reduce((acc, p) => ({ ...acc, [p]: 0 }), {}),
+      hand: [],
+      deck: enemyDeck,
+      discard: []
+    };
+    
+    // 初始抽牌
+    for (let i = 0; i < 5; i++) {
+      newPlayer = drawCard(newPlayer);
+      newEnemy = drawCard(newEnemy);
+    }
+    
+    setPlayer(newPlayer);
+    setEnemy(newEnemy);
+    setGameState('playing');
+    setMessage('游戏开始！选择一张卡牌打出。');
+  };
+
+  // 打出卡牌
+  const playCard = (card, isPlayer = true) => {
+    const current = isPlayer ? player : enemy;
+    const newState = { ...current };
+    
+    // 移除手牌
+    newState.hand = newState.hand.filter(c => c.id !== card.id);
+    newState.discard.push(card);
+    
+    // 增加命途进度
+    const power = CARD_RANKS[card.rank].power;
+    newState.paths[card.path] = (newState.paths[card.path] || 0) + power;
+    
+    if (isPlayer) {
+      setPlayer(newState);
+      setMessage(`你打出了${PATHS[card.path].name}的${CARD_RANKS[card.rank].name}，获得${power}点${PATHS[card.path].name}进度！`);
+    } else {
+      setEnemy(newState);
+    }
+    
+    return newState;
+  };
+
+  // 使用命途能力
+  const usePathAbility = (path, isPlayer = true) => {
+    const current = isPlayer ? player : enemy;
+    const target = isPlayer ? enemy : player;
+    
+    if (current.paths[path] < 3) {
+      if (isPlayer) setMessage('命途进度不足！需要至少3点进度才能使用能力。');
+      return;
+    }
+    
+    let newCurrent = { ...current };
+    let newTarget = { ...target };
+    newCurrent.paths[path] -= 3;
+    
+    let msg = '';
+    
+    switch(path) {
+      case 'destruction':
+        const dmg1 = Math.max(0, 3 - newTarget.shield);
+        newTarget.shield = Math.max(0, newTarget.shield - 3);
+        newTarget.hp -= dmg1;
+        msg = `造成了3点伤害！`;
+        break;
+        
+      case 'preservation':
+        newCurrent.shield += 5;
+        msg = `获得了5点护盾！`;
+        break;
+        
+      case 'abundance':
+        newCurrent.hp = Math.min(30, newCurrent.hp + 4);
+        msg = `恢复了4点生命！`;
+        break;
+        
+      case 'nihility':
+        const pathKeys = Object.keys(newTarget.paths);
+        const randomPath = pathKeys[Math.floor(Math.random() * pathKeys.length)];
+        newTarget.paths[randomPath] = Math.max(0, newTarget.paths[randomPath] - 1);
+        msg = `削弱了对手的${PATHS[randomPath].name}进度！`;
+        break;
+        
+      case 'erudition':
+        newCurrent = drawCard(newCurrent);
+        newCurrent = drawCard(newCurrent);
+        msg = `抽取了2张牌！`;
+        break;
+        
+      case 'hunt':
+        const dmg2a = Math.max(0, 2 - newTarget.shield);
+        newTarget.shield = Math.max(0, newTarget.shield - 2);
+        newTarget.hp -= dmg2a;
+        const dmg2b = Math.max(0, 2 - newTarget.shield);
+        newTarget.shield = Math.max(0, newTarget.shield - 2);
+        newTarget.hp -= dmg2b;
+        msg = `连续造成了2次2点伤害！`;
+        break;
+        
+      case 'remembrance':
+        if (newCurrent.discard.length > 0) {
+          const recovered = newCurrent.discard.pop();
+          newCurrent.hand.push(recovered);
+          msg = `从弃牌堆回收了1张牌！`;
+        } else {
+          msg = `弃牌堆为空，无法回收！`;
+        }
+        break;
+        
+      case 'harmony':
+        Object.keys(newCurrent.paths).forEach(p => {
+          newCurrent.paths[p] += 1;
+        });
+        msg = `所有命途进度+1！`;
+        break;
+    }
+    
+    if (isPlayer) {
+      setPlayer(newCurrent);
+      setEnemy(newTarget);
+      setMessage(msg);
+      
+      // 检查胜负
+      if (newTarget.hp <= 0) {
+        setWinner('player');
+        setGameState('end');
+        return;
+      }
+      
+      // 回合结束
+      setTimeout(() => {
+        setTurn('enemy');
+      }, 1000);
+    } else {
+      setEnemy(newCurrent);
+      setPlayer(newTarget);
+      
+      // 检查胜负
+      if (newTarget.hp <= 0) {
+        setWinner('enemy');
+        setGameState('end');
+        return;
+      }
+    }
+  };
+
+  // AI回合
+  useEffect(() => {
+    if (gameState === 'playing' && turn === 'enemy') {
+      setTimeout(() => {
+        let newEnemy = { ...enemy };
+        
+        // AI打出一张牌
+        if (newEnemy.hand.length > 0) {
+          const card = newEnemy.hand[Math.floor(Math.random() * newEnemy.hand.length)];
+          newEnemy = playCard(card, false);
+        }
+        
+        // AI随机使用一个能力（如果有足够进度）
+        const availablePaths = Object.keys(newEnemy.paths).filter(p => newEnemy.paths[p] >= 3);
+        if (availablePaths.length > 0 && Math.random() > 0.3) {
+          const chosenPath = availablePaths[Math.floor(Math.random() * availablePaths.length)];
+          setTimeout(() => {
+            usePathAbility(chosenPath, false);
+            
+            // 抽牌
+            setTimeout(() => {
+              let finalEnemy = { ...enemy };
+              finalEnemy = drawCard(finalEnemy);
+              setEnemy(finalEnemy);
+              setTurn('player');
+              setMessage('你的回合！');
+            }, 1000);
+          }, 1000);
+        } else {
+          // 抽牌
+          setTimeout(() => {
+            newEnemy = drawCard(newEnemy);
+            setEnemy(newEnemy);
+            setTurn('player');
+            setMessage('你的回合！');
+          }, 1000);
+        }
+      }, 1000);
+    }
+  }, [turn, gameState]);
+
+  // 玩家结束回合
+  const endTurn = () => {
+    if (turn !== 'player') return;
+    
+    let newPlayer = drawCard({ ...player });
+    setPlayer(newPlayer);
+    setTurn('enemy');
+    setMessage('敌人的回合...');
+  };
+
+  if (gameState === 'select') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 p-8">
+        <div className="max-w-6xl mx-auto">
+          <h1 className="text-5xl font-bold text-center text-white mb-4">命途之争</h1>
+          <p className="text-center text-gray-300 mb-8">选择你的主命途，踏上星穹之旅</p>
+          
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {Object.entries(PATHS).map(([key, path]) => {
+              const Icon = path.icon;
+              return (
+                <button
+                  key={key}
+                  onClick={() => startGame(key)}
+                  className="bg-white/10 backdrop-blur-sm border-2 border-white/20 rounded-xl p-6 hover:bg-white/20 hover:scale-105 transition-all"
+                >
+                  <Icon className={`w-12 h-12 mx-auto mb-3 ${path.color}`} />
+                  <h3 className="text-xl font-bold text-white mb-2">{path.name}</h3>
+                  <p className="text-sm text-gray-300">{path.desc}</p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (gameState === 'end') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 p-8 flex items-center justify-center">
+        <div className="bg-white/10 backdrop-blur-sm border-2 border-white/20 rounded-xl p-12 text-center">
+          <h2 className="text-5xl font-bold text-white mb-4">
+            {winner === 'player' ? '胜利！' : '败北...'}
+          </h2>
+          <p className="text-2xl text-gray-300 mb-8">
+            {winner === 'player' ? '你成功击败了对手！' : '继续修行，再次挑战吧！'}
+          </p>
+          <button
+            onClick={() => {
+              setGameState('select');
+              setWinner(null);
+            }}
+            className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-lg font-bold text-lg"
+          >
+            再来一局
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 p-4">
+      <div className="max-w-7xl mx-auto">
+        {/* 敌人状态 */}
+        <div className="bg-red-900/30 backdrop-blur-sm border-2 border-red-500/50 rounded-xl p-4 mb-4">
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="text-xl font-bold text-white">敌人</h3>
+            <div className="flex gap-4">
+              <div className="text-white">❤️ {enemy.hp}/30</div>
+              <div className="text-blue-300">🛡️ {enemy.shield}</div>
+            </div>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {Object.entries(enemy.paths).map(([key, value]) => (
+              value > 0 && (
+                <div key={key} className={`px-2 py-1 rounded ${PATHS[key].bg} text-xs font-bold`}>
+                  {PATHS[key].name}: {value}
+                </div>
+              )
+            ))}
+          </div>
+        </div>
+
+        {/* 消息 */}
+        <div className="bg-white/10 backdrop-blur-sm border-2 border-white/20 rounded-xl p-3 mb-4 text-center text-white">
+          {message}
+        </div>
+
+        {/* 玩家手牌 */}
+        <div className="bg-white/10 backdrop-blur-sm border-2 border-white/20 rounded-xl p-4 mb-4">
+          <h3 className="text-lg font-bold text-white mb-3">你的手牌</h3>
+          <div className="grid grid-cols-5 gap-2">
+            {player.hand.map(card => {
+              const path = PATHS[card.path];
+              const rank = CARD_RANKS[card.rank];
+              const Icon = path.icon;
+              return (
+                <button
+                  key={card.id}
+                  onClick={() => turn === 'player' && playCard(card)}
+                  disabled={turn !== 'player'}
+                  className={`bg-white border-4 ${rank.color} rounded-lg p-3 hover:scale-105 transition-all disabled:opacity-50 disabled:hover:scale-100`}
+                >
+                  <Icon className={`w-8 h-8 mx-auto mb-1 ${path.color}`} />
+                  <div className="text-xs font-bold text-gray-800">{path.name}</div>
+                  <div className="text-xs text-gray-600">{rank.name}</div>
+                  <div className="text-lg font-bold text-purple-600">+{rank.power}</div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 玩家状态和能力 */}
+        <div className="bg-blue-900/30 backdrop-blur-sm border-2 border-blue-500/50 rounded-xl p-4">
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="text-xl font-bold text-white">你</h3>
+            <div className="flex gap-4">
+              <div className="text-white">❤️ {player.hp}/30</div>
+              <div className="text-blue-300">🛡️ {player.shield}</div>
+              <button
+                onClick={endTurn}
+                disabled={turn !== 'player'}
+                className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white px-4 py-1 rounded font-bold"
+              >
+                结束回合
+              </button>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-4 gap-2">
+            {Object.entries(PATHS).map(([key, path]) => {
+              const Icon = path.icon;
+              const progress = player.paths[key] || 0;
+              const canUse = progress >= 3 && turn === 'player';
+              return (
+                <button
+                  key={key}
+                  onClick={() => canUse && usePathAbility(key)}
+                  disabled={!canUse}
+                  className={`${path.bg} border-2 border-gray-300 rounded-lg p-2 hover:scale-105 transition-all disabled:opacity-50 disabled:hover:scale-100`}
+                >
+                  <Icon className={`w-6 h-6 mx-auto mb-1 ${path.color}`} />
+                  <div className="text-xs font-bold text-gray-800">{path.name}</div>
+                  <div className="text-lg font-bold text-purple-600">{progress}</div>
+                  <div className="text-xs text-gray-600">需要3点</div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Game;
