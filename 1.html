@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>命途之竞</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+            background-color: #1a1a2e;
+            color: #e0e0e0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        h1 {
+            color: #fca311;
+            border-bottom: 2px solid #fca311;
+            padding-bottom: 5px;
+        }
+
+        #game-container {
+            display: grid;
+            grid-template-areas:
+                "ai-area ai-area"
+                "info-area info-area"
+                "player-area player-area"
+                "log-area log-area";
+            gap: 20px;
+            width: 100%;
+            max-width: 800px;
+        }
+
+        .player {
+            background-color: #162447;
+            border-radius: 8px;
+            padding: 15px;
+            border: 1px solid #414a6b;
+            min-height: 200px;
+        }
+
+        #player-area { grid-area: player-area; }
+        #ai-area { grid-area: ai-area; }
+        #game-info { grid-area: info-area; text-align: center; }
+        #log-container { grid-area: log-area; }
+
+        .hand {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            min-height: 130px;
+            margin-top: 10px;
+        }
+
+        .card, .card-back {
+            width: 100px;
+            height: 140px;
+            border-radius: 6px;
+            padding: 10px;
+            box-sizing: border-box;
+            background-color: #2a3b5c;
+            border: 2px solid #414a6b;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            font-size: 13px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        #player-area .card {
+            cursor: pointer;
+        }
+
+        #player-area .card:hover {
+            transform: translateY(-10px) scale(1.05);
+            box-shadow: 0 8px 16px rgba(252, 163, 17, 0.3);
+        }
+
+        .card-back {
+            background-color: #1e3d59;
+            border-color: #fca311;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: #fca311;
+        }
+        .card-back::after {
+            content: "★";
+        }
+
+        .card-name {
+            font-weight: bold;
+            font-size: 15px;
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 5px;
+        }
+
+        .card-desc {
+            font-size: 12px;
+            line-height: 1.3;
+        }
+
+        /* 命途颜色 */
+        .card[data-path="Hunt"] { border-color: #e63946; }
+        .card[data-path="Destruction"] { border-color: #f1faee; }
+        .card[data-path="Preservation"] { border-color: #fca311; }
+        .card[data-path="Abundance"] { border-color: #a8dadc; }
+        .card[data-path="Harmony"] { border-color: #f4a261; }
+        .card[data-path="Nihility"] { border-color: #8338ec; }
+        .card[data-path="Erudition"] { border-color: #00b4d8; }
+        .card[data-path="Memory"] { border-color: #457b9d; }
+
+        h2, h3, h4 {
+            margin: 0 0 10px 0;
+            color: #f1faee;
+        }
+        h3 span, h4 span {
+            color: #fca311;
+            font-weight: bold;
+        }
+
+        #log {
+            background-color: #0f1a30;
+            border: 1px solid #414a6b;
+            border-radius: 4px;
+            height: 150px;
+            overflow-y: scroll;
+            padding: 10px;
+            font-size: 14px;
+        }
+        #log p {
+            margin: 0 0 5px 0;
+            padding-bottom: 5px;
+            border-bottom: 1px dashed #2a3b5c;
+        }
+        #log p:last-child {
+            border-bottom: none;
+        }
+
+        #start-game-btn {
+            background-color: #fca311;
+            color: #1a1a2e;
+            border: none;
+            padding: 12px 25px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        #start-game-btn:hover {
+            background-color: #e76f51;
+        }
+
+        #game-over {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            z-index: 100;
+        }
+        #game-over h2 {
+            font-size: 48px;
+            color: #fca311;
+            text-shadow: 0 0 15px #fca311;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>命途之竞</h1>
+
+    <div id="game-container" style="display:none;">
+        <div id="ai-area" class="player">
+            <h2>AI</h2>
+            <h3>状态: <span id="ai-status">普通命途行者</span></h3>
+            <h4>命途点数: <span id="ai-score">0</span></h4>
+            <div id="ai-hand" class="hand"></div>
+        </div>
+
+        <div id="game-info">
+            <p>牌库剩余: <span id="deck-count">0</span> | 弃牌堆: <span id="discard-count">0</span></p>
+            <h3 id="turn-indicator"></h3>
+        </div>
+
+        <div id="player-area" class="player">
+            <h2>玩家</h2>
+            <h3>状态: <span id="player-status">普通命途行者</span></h3>
+            <h4>命途点数: <span id="player-score">0</span></h4>
+            <div id="player-hand" class="hand"></div>
+        </div>
+
+        <div id="log-container">
+            <h3>游戏日志</h3>
+            <div id="log"></div>
+        </div>
+    </div>
+
+    <div id="game-over" style="display:none;">
+        <h2 id="game-over-message"></h2>
+        <button id="restart-game-btn">重新开始</button>
+    </div>
+
+    <button id="start-game-btn">开始游戏</button>
+
+
+    <script>
+        // --- DOM 元素 ---
+        const playerHandEl = document.getElementById('player-hand');
+        const aiHandEl = document.getElementById('ai-hand');
+        const playerScoreEl = document.getElementById('player-score');
+        const aiScoreEl = document.getElementById('ai-score');
+        const playerStatusEl = document.getElementById('player-status');
+        const aiStatusEl = document.getElementById('ai-status');
+        const deckCountEl = document.getElementById('deck-count');
+        const discardCountEl = document.getElementById('discard-count');
+        const logEl = document.getElementById('log');
+        const gameContainer = document.getElementById('game-container');
+        const startGameBtn = document.getElementById('start-game-btn');
+        const gameOverEl = document.getElementById('game-over');
+        const gameOverMessageEl = document.getElementById('game-over-message');
+        const restartGameBtn = document.getElementById('restart-game-btn');
+        const turnIndicatorEl = document.getElementById('turn-indicator');
+
+        // --- 卡牌定义 ---
+        const CARD_DATA = {
+            "Hunt": { name: "【巡猎】", desc: "获得 2 点命途点数。", color: "#e63946" },
+            "Destruction": { name: "【毁灭】", desc: "获得 4 点命途点数。对手也获得 1 点。", color: "#f1faee" },
+            "Preservation": { name: "【存护】", desc: "获得 1 点命途点数。直到你的下个回合开始，你不会失去点数。", color: "#fca311" },
+            "Abundance": { name: "【丰饶】", desc: "获得 1 点命途点数并抽 1 张牌。", color: "#a8dadc" },
+            "Harmony": { name: "【同谐】", desc: "你的下一张卡牌效果翻倍。", color: "#f4a261" },
+            "Nihility": { name: "【虚无】", desc: "对手失去 3 点命途点数（不会低于0或'令使'的10点）。", color: "#8338ec" },
+            "Erudition": { name: "【智识】", desc: "抽 2 张牌。", color: "#00b4d8" },
+            "Memory": { name: "【记忆】", desc: "弃牌堆中每有 5 张牌，你就获得 1 点命途点数。", color: "#457b9d" }
+        };
+
+        // --- 游戏状态 ---
+        let deck = [];
+        let discardPile = [];
+        let playerHand = [];
+        let aiHand = [];
+        let playerScore = 0;
+        let aiScore = 0;
+        let playerStatus = "普通命途行者";
+        let aiStatus = "普通命途行者";
+        
+        let isPlayerTurn = true;
+        let playerImmune = false;
+        let aiImmune = false;
+        let playerHarmonyBuff = false;
+        let aiHarmonyBuff = false;
+        let gameInProgress = false;
+
+        // --- 事件监听 ---
+        startGameBtn.addEventListener('click', initializeGame);
+        restartGameBtn.addEventListener('click', initializeGame);
+
+        // --- 核心功能 ---
+
+        function initializeGame() {
+            // 重置状态
+            deck = [];
+            discardPile = [];
+            playerHand = [];
+            aiHand = [];
+            playerScore = 0;
+            aiScore = 0;
+            playerStatus = "普通命途行者";
+            aiStatus = "普通命途行者";
+            isPlayerTurn = true;
+            playerImmune = false;
+            aiImmune = false;
+            playerHarmonyBuff = false;
+            aiHarmonyBuff = false;
+            gameInProgress = true;
+
+            // 隐藏开始/结束画面，显示游戏
+            gameContainer.style.display = 'grid';
+            startGameBtn.style.display = 'none';
+            gameOverEl.style.display = 'none';
+            logEl.innerHTML = '';
+
+            logMessage("游戏开始！");
+
+            // 创建牌库
+            createDeck();
+            shuffleDeck();
+
+            // 初始抽卡
+            for (let i = 0; i < 5; i++) {
+                drawCard('player');
+                drawCard('ai');
+            }
+            
+            updateUI();
+            startPlayerTurn();
+        }
+
+        function createDeck() {
+            // 每种牌放6张
+            for (const path in CARD_DATA) {
+                for (let i = 0; i < 6; i++) {
+                    deck.push({ type: path, ...CARD_DATA[path] });
+                }
+            }
+        }
+
+        function shuffleDeck() {
+            for (let i = deck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deck[i], deck[j]] = [deck[j], deck[i]];
+            }
+        }
+
+        function drawCard(target) {
+            if (deck.length === 0) {
+                if (discardPile.length === 0) {
+                    logMessage("牌库和弃牌堆都空了！");
+                    return;
+                }
+                logMessage("牌库已空，洗回弃牌堆...");
+                deck = [...discardPile];
+                discardPile = [];
+                shuffleDeck();
+            }
+
+            const card = deck.pop();
+            if (target === 'player') {
+                if (playerHand.length < 7) { // 手牌上限
+                    playerHand.push(card);
+                }
+            } else {
+                if (aiHand.length < 7) {
+                    aiHand.push(card);
+                }
+            }
+        }
+
+        function startPlayerTurn() {
+            if (!gameInProgress) return;
+            isPlayerTurn = true;
+            playerImmune = false; // 存护效果在回合开始时失效
+            
+            // 回合开始抽卡 (第一回合不抽)
+            if (logEl.children.length > 1) { // 简陋的判断是否为第一回合
+                 drawCard('player');
+            }
+           
+            logMessage("轮到你的回合。请出牌。");
+            turnIndicatorEl.innerText = "你的回合";
+            updateUI();
+            
+            // 允许玩家手牌点击
+            renderPlayerHand();
+        }
+
+        function playCard(cardIndex) {
+            if (!isPlayerTurn || !gameInProgress) return;
+
+            isPlayerTurn = false; // 立即设为 false，防止连点
+            const card = playerHand.splice(cardIndex, 1)[0];
+            discardPile.push(card);
+
+            logMessage(`玩家打出了 [${card.name}]。`);
+            executeCardEffect(card, 'player');
+            
+            updateUI(); // 结算后立即更新UI
+
+            if (checkWinCondition()) return;
+
+            // 延迟AI回合
+            turnIndicatorEl.innerText = "AI 回合...";
+            setTimeout(aiTurn, 2000);
+        }
+
+        function executeCardEffect(card, player) {
+            const target = (player === 'player') ? 'ai' : 'player';
+            let multiplier = 1;
+
+            // 处理同谐
+            if (player === 'player' && playerHarmonyBuff) {
+                multiplier = 2;
+                playerHarmonyBuff = false;
+                logMessage("【同谐】效果触发，效果翻倍！");
+            } else if (player === 'ai' && aiHarmonyBuff) {
+                multiplier = 2;
+                aiHarmonyBuff = false;
+                logMessage("AI 的【同谐】效果触发，效果翻倍！");
+            }
+
+            switch (card.type) {
+                case "Hunt":
+                    updateScore(player, 2 * multiplier);
+                    break;
+                case "Destruction":
+                    updateScore(player, 4 * multiplier);
+                    updateScore(target, 1 * multiplier); // 对手也加点
+                    break;
+                case "Preservation":
+                    updateScore(player, 1 * multiplier);
+                    if (player === 'player') playerImmune = true;
+                    else aiImmune = true;
+                    logMessage(`${player === 'player' ? '玩家' : 'AI'} 获得了 [存护] 状态。`);
+                    break;
+                case "Abundance":
+                    updateScore(player, 1 * multiplier);
+                    drawCard(player);
+                    break;
+                case "Harmony":
+                    if (player === 'player') playerHarmonyBuff = true;
+                    else aiHarmonyBuff = true;
+                    logMessage(`${player === 'player' ? '玩家' : 'AI'} 获得了 [同谐] 充能。`);
+                    break;
+                case "Nihility":
+                    updateScore(target, -3 * multiplier);
+                    break;
+                case "Erudition":
+                    drawCard(player);
+                    drawCard(player);
+                    break;
+                case "Memory":
+                    const points = Math.floor(discardPile.length / 5) * multiplier;
+                    updateScore(player, points);
+                    logMessage(`弃牌堆有 ${discardPile.length} 张牌，获得了 ${points} 点。`);
+                    break;
+            }
+        }
+
+        function aiTurn() {
+            if (!gameInProgress) return;
+            aiImmune = false; // 存护效果失效
+            drawCard('ai');
+            logMessage("AI 的回合。");
+
+            // --- 简单的 AI 逻辑 ---
+            let bestCardIndex = 0;
+            let bestScore = -999;
+
+            for (let i = 0; i < aiHand.length; i++) {
+                const card = aiHand[i];
+                let score = 0;
+
+                // 1. 优先获胜
+                if (card.type === 'Hunt' && (aiScore + (aiHarmonyBuff ? 4 : 2) >= 20)) score = 1000;
+                else if (card.type === 'Destruction' && (aiScore + (aiHarmonyBuff ? 8 : 4) >= 20)) score = 1000;
+                // ... 其他获胜条件
+
+                // 2. 进攻
+                else if (card.type === 'Nihility' && playerScore > 10) score = 15;
+                
+                // 3. 发展
+                else if (card.type === 'Harmony') score = 10;
+                else if (card.type === 'Erudition') score = 8;
+                else if (card.type === 'Abundance') score = 7;
+                
+                // 4. 得分
+                else if (card.type === 'Destruction') score = 12;
+                else if (card.type === 'Hunt') score = 9;
+                else if (card.type === 'Memory') score = 5 + Math.floor(discardPile.length / 5);
+                
+                // 5. 防守 (优先级最低)
+                else if (card.type === 'Preservation') score = 4;
+                
+                if (aiHarmonyBuff) { // 如果有buff，优先用高收益卡
+                    if (card.type === 'Destruction') score += 20;
+                    if (card.type === 'Hunt') score += 15;
+                }
+
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestCardIndex = i;
+                }
+            }
+
+            // 随机选一张 (如果分数都一样)
+            if (bestScore <= 0 && aiHand.length > 0) {
+                bestCardIndex = Math.floor(Math.random() * aiHand.length);
+            }
+            if(aiHand.length === 0) {
+                 logMessage("AI 没有手牌，跳过回合。");
+            } else {
+                const card = aiHand.splice(bestCardIndex, 1)[0];
+                discardPile.push(card);
+                logMessage(`AI 打出了 [${card.name}]。`);
+                executeCardEffect(card, 'ai');
+            }
+
+
+            updateUI();
+
+            if (checkWinCondition()) return;
+
+            // 轮到玩家
+            startPlayerTurn();
+        }
+
+        function updateScore(player, amount) {
+            if (player === 'player') {
+                if (amount < 0 && playerImmune) {
+                    logMessage("玩家受到 [存护] 保护，点数未减少！");
+                    return;
+                }
+                playerScore += amount;
+                if (playerScore < 0) playerScore = 0;
+                if (playerStatus === "令使 (Emanator)" && playerScore < 10) {
+                    playerScore = 10;
+                }
+            } else {
+                if (amount < 0 && aiImmune) {
+                    logMessage("AI 受到 [存护] 保护，点数未减少！");
+                    return;
+                }
+                aiScore += amount;
+                if (aiScore < 0) aiScore = 0;
+                if (aiStatus === "令使 (Emanator)" && aiScore < 10) {
+                    aiScore = 10;
+                }
+            }
+            updateStatus();
+        }
+
+        function updateStatus() {
+            // 玩家状态
+            if (playerScore >= 20) playerStatus = "星神 (Aeon)";
+            else if (playerScore >= 10) playerStatus = "令使 (Emanator)";
+            else playerStatus = "普通命途行者";
+
+            // AI 状态
+            if (aiScore >= 20) aiStatus = "星神 (Aeon)";
+            else if (aiScore >= 10) aiStatus = "令使 (Emanator)";
+            else aiStatus = "普通命途行者";
+        }
+
+        function checkWinCondition() {
+            if (playerScore >= 20) {
+                endGame("玩家已登神！你赢了！");
+                return true;
+            }
+            if (aiScore >= 20) {
+                endGame("AI已登神！你输了。");
+                return true;
+            }
+            return false;
+        }
+
+        function endGame(message) {
+            gameInProgress = false;
+            gameOverEl.style.display = 'flex';
+            gameOverMessageEl.innerText = message;
+            gameContainer.style.display = 'none';
+            startGameBtn.style.display = 'block'; // 显示按钮以便重开
+            startGameBtn.innerText = '重新开始'; // 按钮文字改为重开
+        }
+
+        // --- 渲染与日志 ---
+
+        function updateUI() {
+            if (!gameInProgress) return;
+            // 更新分数和状态
+            playerScoreEl.innerText = playerScore;
+            aiScoreEl.innerText = aiScore;
+            playerStatusEl.innerText = playerStatus;
+            aiStatusEl.innerText = aiStatus;
+
+            // 更新牌堆数量
+            deckCountEl.innerText = deck.length;
+            discardCountEl.innerText = discardPile.length;
+
+            // 渲染手牌
+            renderPlayerHand();
+            renderAIHand();
+        }
+
+        function renderPlayerHand() {
+            playerHandEl.innerHTML = '';
+            playerHand.forEach((card, index) => {
+                const cardEl = document.createElement('div');
+                cardEl.className = 'card';
+                cardEl.dataset.path = card.type;
+                cardEl.innerHTML = `
+                    <div class="card-name" style="color: ${card.color}">${card.name}</div>
+                    <div class="card-desc">${card.desc}</div>
+                `;
+                
+                if (isPlayerTurn) {
+                    cardEl.addEventListener('click', () => playCard(index));
+                } else {
+                    cardEl.style.cursor = 'not-allowed';
+                }
+                
+                playerHandEl.appendChild(cardEl);
+            });
+        }
+
+        function renderAIHand() {
+            aiHandEl.innerHTML = '';
+            for (let i = 0; i < aiHand.length; i++) {
+                const cardBackEl = document.createElement('div');
+                cardBackEl.className = 'card-back';
+                aiHandEl.appendChild(cardBackEl);
+            }
+        }
+
+        function logMessage(message) {
+            const p = document.createElement('p');
+            p.textContent = message;
+            logEl.appendChild(p);
+            logEl.scrollTop = logEl.scrollHeight; // 自动滚到最底
+        }
+
+    </script>
+</body>
+</html>
