@@ -1,0 +1,1400 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>UNDERFALL - 战斗界面仿制 DEMO</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at top, #222 0, #050509 55%, #000 100%);
+      color: #fff;
+      font-family: "Courier New", Menlo, Consolas, monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      overflow-x: hidden;
+    }
+
+    #frame {
+      margin-top: 10px;
+      padding: 8px 10px 10px;
+      border-radius: 14px;
+      border: 2px solid #ffffff88;
+      background: radial-gradient(circle at top, #101018 0, #040408 65%);
+      box-shadow:
+        0 0 18px rgba(255,255,255,0.16),
+        0 0 40px rgba(50,150,255,0.18);
+      max-width: 680px;
+      width: calc(100vw - 20px);
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    #title-bar {
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-align: center;
+      padding-bottom: 4px;
+      color: #ffd46a;
+      border-bottom: 1px solid #ffffff33;
+      text-shadow: 0 0 4px #000;
+    }
+
+    #game-container {
+      margin-top: 6px;
+      display: flex;
+      justify-content: center;
+      width: 100%;
+    }
+
+    canvas#game {
+      border-radius: 10px;
+      border: 3px solid #fff;
+      background: #000;
+      width: min(100vw - 40px, 640px);
+      height: auto;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      box-shadow:
+        0 0 12px rgba(0,0,0,0.8) inset,
+        0 0 16px rgba(0,0,0,0.9);
+    }
+
+    #hint-bar {
+      margin-top: 4px;
+      font-size: 10px;
+      color: #bbbbc8;
+      text-align: center;
+      opacity: 0.9;
+    }
+
+    #toggle-controls {
+      margin-top: 8px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid #ffffffaa;
+      background: linear-gradient(180deg, #20202a, #050509);
+      color: #f8f4e8;
+      font-family: inherit;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      box-shadow: 0 0 8px rgba(0,0,0,0.6);
+    }
+    #toggle-controls:active {
+      transform: translateY(1px);
+      box-shadow: 0 0 4px rgba(0,0,0,0.6);
+    }
+
+    /* 虚拟按键 */
+    #touch-controls {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 6px 10px 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      pointer-events: none;
+      z-index: 10;
+    }
+    #touch-controls.hidden {
+      display: none;
+    }
+    #touch-controls .dpad,
+    #touch-controls .ab-buttons {
+      pointer-events: auto;
+    }
+
+    .dpad {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .dpad-row {
+      display: flex;
+      gap: 4px;
+    }
+    .control-btn {
+      min-width: 44px;
+      min-height: 44px;
+      border-radius: 12px;
+      border: 1px solid #ffffffcc;
+      background: radial-gradient(circle, #1b1b26 0, #050509 80%);
+      color: #f8f4e8;
+      font-size: 16px;
+      font-family: inherit;
+      touch-action: none;
+      box-shadow:
+        0 0 4px rgba(0,0,0,0.9),
+        0 0 8px rgba(0,0,0,0.7);
+    }
+    .control-btn:active {
+      transform: translateY(1px);
+      box-shadow: 0 0 3px rgba(0,0,0,0.8);
+    }
+
+    .ab-buttons {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+    }
+    .ab-buttons .control-btn {
+      min-width: 88px;
+      font-size: 12px;
+    }
+
+    @media (min-width: 800px) {
+      #frame {
+        margin-top: 20px;
+      }
+      #touch-controls {
+        max-width: 680px;
+        margin: 0 auto;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+      .control-btn {
+        min-width: 40px;
+        min-height: 40px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="frame">
+    <div id="title-bar">UNDERFALL · 战斗界面仿制 DEMO</div>
+    <div id="game-container">
+      <canvas id="game" width="320" height="240"></canvas>
+    </div>
+    <div id="hint-bar">
+      键盘：方向键 / WASD · Z 确认 · X 取消 ｜ 手机：使用下方虚拟按键
+    </div>
+  </div>
+
+  <button id="toggle-controls">隐藏虚拟按键</button>
+
+  <!-- 虚拟按键 -->
+  <div id="touch-controls">
+    <div class="dpad">
+      <button id="btn-up" class="control-btn">▲</button>
+      <div class="dpad-row">
+        <button id="btn-left" class="control-btn">◀</button>
+        <button id="btn-down" class="control-btn">▼</button>
+        <button id="btn-right" class="control-btn">▶</button>
+      </div>
+    </div>
+    <div class="ab-buttons">
+      <button id="btn-confirm" class="control-btn">Z / 确认</button>
+      <button id="btn-cancel" class="control-btn">X / 取消</button>
+    </div>
+  </div>
+
+  <script>
+    // ========= 基础 =========
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const WIDTH = canvas.width;
+    const HEIGHT = canvas.height;
+    ctx.imageSmoothingEnabled = false;
+
+    const STATE_TITLE = "title";
+    const STATE_WORLD = "world";
+    const STATE_BATTLE = "battle";
+
+    let gameState = STATE_TITLE;
+
+    const PLAYER_NAME = "FALLEN";
+
+    const player = {
+      x: WIDTH / 2,
+      y: HEIGHT - 60,
+      w: 8,
+      h: 12,
+      speed: 80
+    };
+
+    const stats = {
+      lv: 1,
+      exp: 0,
+      hp: 20,
+      maxHp: 20,
+      atk: 5,
+      def: 0,
+      gold: 0
+    };
+
+    let inventory = [
+      { id: "candy", name: "星星糖果", heal: 10, desc: "回复 10 HP。" },
+      { id: "bandage", name: "旧绷带", heal: 6, desc: "有点脏，但还能用。" }
+    ];
+
+    const story = {
+      introSeen: false,
+      ghostMet: false,
+      ghostSpared: false,
+      ghostKilled: false
+    };
+
+    let killCount = 0;
+
+    // NPC & 存档
+    const ghostNpc = {
+      x: WIDTH / 2,
+      y: HEIGHT / 2 - 10,
+      w: 10,
+      h: 14,
+      active: true
+    };
+
+    let savePoint = null; // { x,y,stats,inventory,story,killCount }
+
+    // ========= 输入 =========
+    const input = {
+      up: false,
+      down: false,
+      left: false,
+      right: false,
+      confirm: false,
+      cancel: false
+    };
+    let prevInput = { ...input };
+
+    function wasPressed(key) {
+      return input[key] && !prevInput[key];
+    }
+
+    function setupKeyboard() {
+      window.addEventListener('keydown', e => {
+        let handled = false;
+        switch (e.key) {
+          case "ArrowUp": case "w": case "W": input.up = true; handled = true; break;
+          case "ArrowDown": case "s": case "S": input.down = true; handled = true; break;
+          case "ArrowLeft": case "a": case "A": input.left = true; handled = true; break;
+          case "ArrowRight": case "d": case "D": input.right = true; handled = true; break;
+          case "z": case "Z": case "Enter": case " ": input.confirm = true; handled = true; break;
+          case "x": case "X": case "Escape": input.cancel = true; handled = true; break;
+        }
+        if (handled) e.preventDefault();
+      });
+      window.addEventListener('keyup', e => {
+        switch (e.key) {
+          case "ArrowUp": case "w": case "W": input.up = false; break;
+          case "ArrowDown": case "s": case "S": input.down = false; break;
+          case "ArrowLeft": case "a": case "A": input.left = false; break;
+          case "ArrowRight": case "d": case "D": input.right = false; break;
+          case "z": case "Z": case "Enter": case " ": input.confirm = false; break;
+          case "x": case "X": case "Escape": input.cancel = false; break;
+        }
+      });
+    }
+
+    function setupVirtualButton(id, prop) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const press = e => { e.preventDefault(); input[prop] = true; };
+      const release = e => { e.preventDefault(); input[prop] = false; };
+      el.addEventListener('touchstart', press);
+      el.addEventListener('touchend', release);
+      el.addEventListener('touchcancel', release);
+      el.addEventListener('mousedown', press);
+      el.addEventListener('mouseup', release);
+      el.addEventListener('mouseleave', release);
+    }
+
+    function setupTouchControls() {
+      setupVirtualButton('btn-up', 'up');
+      setupVirtualButton('btn-down', 'down');
+      setupVirtualButton('btn-left', 'left');
+      setupVirtualButton('btn-right', 'right');
+      setupVirtualButton('btn-confirm', 'confirm');
+      setupVirtualButton('btn-cancel', 'cancel');
+
+      const toggleBtn = document.getElementById('toggle-controls');
+      const touchControls = document.getElementById('touch-controls');
+      let visible = true;
+      toggleBtn.addEventListener('click', () => {
+        visible = !visible;
+        if (visible) {
+          touchControls.classList.remove('hidden');
+          toggleBtn.textContent = "隐藏虚拟按键";
+        } else {
+          touchControls.classList.add('hidden');
+          toggleBtn.textContent = "显示虚拟按键";
+        }
+      });
+    }
+
+    // ========= 工具 =========
+    function clamp(v, min, max) { return v < min ? min : (v > max ? max : v); }
+
+    function rectIntersect(a,b){
+      return Math.abs(a.x-b.x) < (a.w+b.w)/2 &&
+             Math.abs(a.y-b.y) < (a.h+b.h)/2;
+    }
+
+    function drawWrapped(text,x,y,maxWidth,lineHeight){
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      let line = "";
+      let lineY = y;
+      for (let i=0;i<text.length;i++){
+        const ch = text[i];
+        if (ch === "\n") {
+          if (line.length>0) ctx.fillText(line,x,lineY);
+          line = "";
+          lineY += lineHeight;
+          continue;
+        }
+        const test = line + ch;
+        const w = ctx.measureText(test).width;
+        if (w > maxWidth && line !== "") {
+          ctx.fillText(line,x,lineY);
+          line = ch;
+          lineY += lineHeight;
+        } else {
+          line = test;
+        }
+      }
+      if (line.length>0) ctx.fillText(line,x,lineY);
+    }
+
+    // ========= 对话系统 =========
+    let dialog = null; // { lines, index, onComplete }
+
+    function startDialog(lines, onComplete){
+      dialog = { lines, index:0, onComplete: onComplete || null };
+    }
+
+    function advanceDialog(){
+      if (!dialog) return;
+      if (dialog.index < dialog.lines.length - 1){
+        dialog.index++;
+      } else {
+        const cb = dialog.onComplete;
+        dialog = null;
+        if (typeof cb === "function") cb();
+      }
+    }
+
+    function getDialogRect(){
+      if (gameState === STATE_BATTLE){
+        // 使用战斗里的对话框区域
+        const m = 8, gap = 4, topH = 120, textH = 52;
+        const y = m + topH + gap;
+        return { x:m, y, w:WIDTH-2*m, h:textH };
+      } else {
+        const h = 70, m = 8;
+        return { x:m, y:HEIGHT-h-m, w:WIDTH-2*m, h };
+      }
+    }
+
+    function drawDialog(){
+      if (!dialog) return;
+      const rect = getDialogRect();
+      ctx.fillStyle = "#000";
+      ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+
+      ctx.fillStyle = "#fff";
+      ctx.font = "10px 'Courier New', monospace";
+      const pad = 6;
+      const text = dialog.lines[dialog.index];
+      drawWrapped(text, rect.x+pad, rect.y+pad, rect.w-pad*2, 12);
+
+      ctx.textAlign = "right";
+      ctx.textBaseline = "bottom";
+      ctx.fillText("Z / 回车 继续", rect.x+rect.w-pad, rect.y+rect.h-pad);
+    }
+
+    // ========= 标题场景 =========
+    function resetGame(){
+      gameState = STATE_TITLE;
+      player.x = WIDTH/2;
+      player.y = HEIGHT-60;
+
+      stats.lv = 1;
+      stats.exp = 0;
+      stats.hp = stats.maxHp = 20;
+      stats.atk = 5;
+      stats.def = 0;
+      stats.gold = 0;
+
+      inventory = [
+        { id: "candy", name: "星星糖果", heal: 10, desc: "回复 10 HP。" },
+        { id: "bandage", name: "旧绷带", heal: 6, desc: "有点脏，但还能用。" }
+      ];
+
+      story.introSeen = false;
+      story.ghostMet = false;
+      story.ghostSpared = false;
+      story.ghostKilled = false;
+      killCount = 0;
+
+      ghostNpc.active = true;
+      savePoint = null;
+      dialog = null;
+      battle = null;
+    }
+
+    function updateTitle(){
+      if (wasPressed("confirm")){
+        startDialog([
+          "你从一个看不见的裂缝跌落。",
+          "下面是一片安静的地底。",
+          "有人说，每一颗掉下来的心，\n都会在这里留下痕迹。",
+          "看看这一次，\n你会留下怎样的痕迹。"
+        ], () => {
+          gameState = STATE_WORLD;
+        });
+      }
+    }
+
+    function drawTitle(){
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0,0,WIDTH,HEIGHT);
+
+      ctx.fillStyle = "#fff";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      ctx.font = "24px 'Courier New', monospace";
+      ctx.fillText("UNDERFALL", WIDTH/2, HEIGHT/2 - 34);
+
+      ctx.font = "10px 'Courier New', monospace";
+      ctx.fillText("非官方 Undertale 风格 DEMO", WIDTH/2, HEIGHT/2);
+
+      const t = Date.now() / 500;
+      if (Math.floor(t) % 2 === 0){
+        ctx.fillText("按 Z / 回车 开始", WIDTH/2, HEIGHT - 34);
+      }
+
+      ctx.font = "8px 'Courier New', monospace";
+      ctx.fillText("（本作只仿 UI 和氛围，不含原作素材）", WIDTH/2, HEIGHT - 18);
+    }
+
+    // ========= 世界场景 =========
+    function worldBounds(){
+      return { minX:40, maxX:WIDTH-40, minY:60, maxY:HEIGHT-40 };
+    }
+
+    function doSave(){
+      savePoint = {
+        x: player.x,
+        y: player.y,
+        stats: JSON.parse(JSON.stringify(stats)),
+        inventory: JSON.parse(JSON.stringify(inventory)),
+        story: JSON.parse(JSON.stringify(story)),
+        killCount
+      };
+      startDialog([
+        "* 星星在轻轻闪烁。",
+        "* 你觉得自己被牢牢记住了。"
+      ], null);
+    }
+
+    function loadFromSave(){
+      if (!savePoint) {
+        resetGame();
+        return;
+      }
+      Object.assign(stats, savePoint.stats);
+      inventory = JSON.parse(JSON.stringify(savePoint.inventory));
+      Object.assign(story, savePoint.story);
+      killCount = savePoint.killCount;
+      player.x = savePoint.x;
+      player.y = savePoint.y;
+      gameState = STATE_WORLD;
+      dialog = null;
+      battle = null;
+      startDialog([
+        "……",
+        "一阵熟悉的光从脚下亮起。",
+        "你回到了被记录下来的那个瞬间。"
+      ], null);
+    }
+
+    function updateWorld(dt){
+      let vx = 0, vy = 0;
+      if (input.left) vx -= 1;
+      if (input.right) vx += 1;
+      if (input.up) vy -= 1;
+      if (input.down) vy += 1;
+
+      if (vx !== 0 || vy !== 0){
+        const len = Math.hypot(vx,vy) || 1;
+        vx/=len; vy/=len;
+        player.x += vx * player.speed * dt;
+        player.y += vy * player.speed * dt;
+      }
+
+      const b = worldBounds();
+      player.x = clamp(player.x, b.minX, b.maxX);
+      player.y = clamp(player.y, b.minY, b.maxY);
+
+      // 存档点（场景右下角）
+      const saveX = WIDTH/2 + 40;
+      const saveY = b.maxY - 10;
+      if (Math.hypot(player.x-saveX, player.y-saveY) < 18 &&
+          wasPressed("confirm")){
+        doSave();
+      }
+
+      // 幽灵 NPC
+      if (ghostNpc.active){
+        const dist = Math.hypot(player.x-ghostNpc.x, player.y-ghostNpc.y);
+        if (dist < 18 && wasPressed("confirm")){
+          story.ghostMet = true;
+          startDialog([
+            "???: ……呀。",
+            "???: 又一颗心掉下来了。",
+            "???: 我叫『幽灵碎片』。",
+            "???: 在这里，心会被世界\n    记住一小会儿。",
+            "???: 能不能，让我看看\n    你的心，会怎么做？"
+          ], () => {
+            startBattle("ghost");
+          });
+        }
+      }
+
+      // 上方出口 —— 结局
+      if (player.y <= b.minY + 2 &&
+          player.x > WIDTH/2 - 15 &&
+          player.x < WIDTH/2 + 15 &&
+          wasPressed("confirm")) {
+        let lines;
+        if (killCount === 0 && story.ghostSpared){
+          lines = [
+            "你抬头望向裂缝上方的光。",
+            "那里看不见任何人，\n但你知道，有人被你温柔地记住过。",
+            "也许世界不会因此改变很多，",
+            "但某个角落，\n少了一点需要害怕的东西。",
+            "—— PEACEFUL END ——"
+          ];
+        } else if (story.ghostKilled){
+          lines = [
+            "你抬头望向裂缝上方的光。",
+            "幽灵碎片的身影\n已经彻底消失了。",
+            "你成功让这条路\n变得更安静、更安全。",
+            "只是，你不知道\n自己会不会喜欢这样的安静。",
+            "—— CRUEL END ——"
+          ];
+        } else {
+          lines = [
+            "你抬头望向裂缝上方的光。",
+            "你把一部分人留在了这里，\n也把一部分人带在了身上。",
+            "没有谁完全正确，\n也没有谁完全错误。",
+            "你只是第一次\n认真地为自己的选择负责。",
+            "—— NEUTRAL END ——"
+          ];
+        }
+        startDialog(lines, () => resetGame());
+      }
+    }
+
+    function drawWorld(){
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0,0,WIDTH,HEIGHT);
+
+      const b = worldBounds();
+
+      // 地板
+      ctx.fillStyle = "#2b2b36";
+      ctx.fillRect(20,50,WIDTH-40,HEIGHT-70);
+      ctx.fillStyle = "#3a3a46";
+      for (let y=60;y<HEIGHT-40;y+=10){
+        ctx.fillRect(22,y,WIDTH-44,1);
+      }
+
+      // 房间名
+      ctx.fillStyle = "#fff";
+      ctx.font = "8px 'Courier New', monospace";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      ctx.fillText("落穴厅 · 这里是很多故事的起点",24,54);
+      ctx.textAlign = "right";
+      ctx.fillText("LV " + stats.lv + "   HP " + stats.hp + "/" + stats.maxHp, WIDTH-8,54);
+
+      // 上方出口
+      ctx.fillStyle = "#000";
+      ctx.fillRect(WIDTH/2-12,50,24,4);
+      ctx.fillStyle = "#fff";
+      ctx.textAlign = "center";
+      ctx.fillText("靠近上方裂缝按 Z 结束旅程", WIDTH/2, HEIGHT-26);
+
+      // 存档星星
+      const saveX = WIDTH/2 + 40;
+      const saveY = b.maxY - 10;
+      ctx.save();
+      ctx.translate(saveX, saveY);
+      const t = (Date.now()/200)%(Math.PI*2);
+      const r = 5 + Math.sin(t)*1;
+      ctx.beginPath();
+      for (let i=0;i<5;i++){
+        const ang = i*(Math.PI*2/5) - Math.PI/2;
+        const x = Math.cos(ang)*r;
+        const y = Math.sin(ang)*r;
+        if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.closePath();
+      ctx.fillStyle = "#ffff88";
+      ctx.fill();
+      ctx.restore();
+
+      ctx.textAlign = "center";
+      ctx.fillText("靠近星星按 Z 存档", saveX, saveY - 14);
+
+      // 幽灵 NPC
+      if (ghostNpc.active){
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(ghostNpc.x-ghostNpc.w/2, ghostNpc.y-ghostNpc.h/2,
+                     ghostNpc.w, ghostNpc.h);
+        ctx.fillRect(ghostNpc.x-3, ghostNpc.y-3,1,1);
+        ctx.fillRect(ghostNpc.x+2, ghostNpc.y-3,1,1);
+        ctx.fillRect(ghostNpc.x-2, ghostNpc.y+1,4,1);
+
+        const dist = Math.hypot(player.x-ghostNpc.x, player.y-ghostNpc.y);
+        if (dist<20){
+          ctx.textAlign = "center";
+          ctx.fillText("按 Z 与幽灵碎片说话", WIDTH/2, HEIGHT-40);
+        }
+      }
+
+      // 玩家小红心
+      ctx.fillStyle = "#ff3333";
+      ctx.fillRect(player.x-player.w/2, player.y-player.h/2, player.w, player.h);
+    }
+
+    // ========= 战斗系统 =========
+    let battle = null; // 对象或 null
+    let battleReturn = null;
+
+    const BATTLE_COLORS = {
+      border: "#ffffff",
+      grid: "#008800",
+      button: "#ff9b00",
+      buttonText: "#ff9b00",
+      buttonSelectedBg: "#ff9b00",
+      buttonSelectedText: "#000000",
+      hpBar: "#ffff00"
+    };
+
+    function getBattleRects(){
+      const margin = 8;
+      const gap = 4;
+      const topH = 120;
+      const textH = 52;
+      const top = {
+        x: margin,
+        y: margin,
+        w: WIDTH - margin*2,
+        h: topH
+      };
+      const textBox = {
+        x: margin,
+        y: margin + topH + gap,
+        w: WIDTH - margin*2,
+        h: textH
+      };
+      const bottomY = textBox.y + textBox.h + gap;
+      const bottom = {
+        x: margin,
+        y: bottomY,
+        w: WIDTH - margin*2,
+        h: HEIGHT - margin - bottomY
+      };
+      return { top, textBox, bottom };
+    }
+
+    function startBattle(enemyId){
+      gameState = STATE_BATTLE;
+      battleReturn = {
+        x: player.x,
+        y: player.y
+      };
+
+      const rects = getBattleRects();
+      const boxW = 90;
+      const boxH = 60;
+      const box = {
+        x: rects.top.x + rects.top.w/2,
+        y: rects.top.y + rects.top.h*0.65,
+        w: boxW,
+        h: boxH
+      };
+
+      battle = {
+        enemyId,
+        enemyName: "幽灵碎片",
+        enemyHp: 28,
+        enemyMaxHp: 28,
+        enemyAtk: 6,
+        enemyDef: 0,
+        expGain: 6,
+        goldGain: 4,
+        mood: 0,          // ACT 用
+        canSpare: false,
+        menuIndex: 0,     // 0:FIGHT 1:ACT 2:ITEM 3:MERCY
+        actIndex: 0,
+        itemIndex: 0,
+        substate: "menu", // menu / act-menu / item-menu / attack-bar / enemy-turn
+        bullets: [],
+        wave: 0,
+        attackTimer: 0,
+        nextBulletTime: 0,
+        attackDuration: 0,
+        pattern: "horizontal",
+        damageFlash: 0,
+        enemyFlash: 0,
+        attackBar: {
+          active: false,
+          pos: 0,
+          speed: 140,
+          dir: 1
+        },
+        soul: {
+          x: box.x,
+          y: box.y,
+          w: 8,
+          h: 8,
+          speed: 90
+        },
+        box
+      };
+
+      startDialog([
+        "幽灵碎片从地板的缝隙里飘了出来。"
+      ], null);
+    }
+
+    function resetSoulPosition(){
+      if (!battle) return;
+      battle.soul.x = battle.box.x;
+      battle.soul.y = battle.box.y;
+    }
+
+    function startEnemyTurn(){
+      if (!battle) return;
+      battle.substate = "enemy-turn";
+      battle.bullets = [];
+      battle.attackTimer = 0;
+      battle.wave++;
+      battle.attackDuration = 5.0 - Math.min(2, battle.wave) * 0.5;
+      battle.attackDuration = Math.max(3.3, battle.attackDuration);
+      battle.nextBulletTime = 0;
+      battle.pattern = (battle.wave % 2 === 0) ? "horizontal" : "vertical";
+      resetSoulPosition();
+    }
+
+    function spawnBullet(){
+      if (!battle) return;
+      const box = battle.box;
+      if (battle.pattern === "horizontal"){
+        const y = box.y - box.h/2 + 10 + Math.random()*(box.h-20);
+        const speed = 80 + battle.wave*8;
+        battle.bullets.push({ x:box.x - box.w/2 - 12, y, w:10, h:4, vx:speed, vy:0 });
+      } else {
+        const x = box.x - box.w/2 + 10 + Math.random()*(box.w-20);
+        const speed = 80 + battle.wave*8;
+        battle.bullets.push({ x, y:box.y + box.h/2 + 12, w:4, h:10, vx:0, vy:-speed });
+      }
+    }
+
+    function updateEnemyTurn(dt){
+      if (!battle) return;
+      const box = battle.box;
+
+      battle.attackTimer += dt;
+      if (battle.attackTimer >= battle.nextBulletTime){
+        spawnBullet();
+        let gap = 0.8 - Math.min(0.4, battle.wave*0.05);
+        battle.nextBulletTime += Math.max(0.25, gap);
+      }
+
+      if (battle.attackTimer >= battle.attackDuration){
+        battle.substate = "menu";
+        battle.bullets = [];
+        resetSoulPosition();
+        startDialog([
+          "幽灵碎片暂时停下了攻击。",
+          "轮到你行动了。"
+        ], null);
+        return;
+      }
+
+      // 灵魂移动
+      let vx=0, vy=0;
+      if (input.left) vx -= 1;
+      if (input.right) vx += 1;
+      if (input.up) vy -= 1;
+      if (input.down) vy += 1;
+      if (vx !== 0 || vy !== 0){
+        const len = Math.hypot(vx,vy) || 1;
+        vx/=len; vy/=len;
+        battle.soul.x += vx * battle.soul.speed * dt;
+        battle.soul.y += vy * battle.soul.speed * dt;
+      }
+
+      const left = box.x - box.w/2 + battle.soul.w/2;
+      const right = box.x + box.w/2 - battle.soul.w/2;
+      const top = box.y - box.h/2 + battle.soul.h/2;
+      const bottom = box.y + box.h/2 - battle.soul.h/2;
+      battle.soul.x = clamp(battle.soul.x, left, right);
+      battle.soul.y = clamp(battle.soul.y, top, bottom);
+
+      // 子弹
+      const newBullets = [];
+      for (let b of battle.bullets){
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+        const out =
+          b.x < box.x - box.w/2 - 20 ||
+          b.x > box.x + box.w/2 + 20 ||
+          b.y < box.y - box.h/2 - 20 ||
+          b.y > box.y + box.h/2 + 20;
+        if (!out) newBullets.push(b);
+      }
+      battle.bullets = newBullets;
+
+      // 碰撞检测
+      const soulRect = {
+        x: battle.soul.x,
+        y: battle.soul.y,
+        w: battle.soul.w,
+        h: battle.soul.h
+      };
+      for (let i=0;i<battle.bullets.length;i++){
+        const b = battle.bullets[i];
+        const br = { x:b.x, y:b.y, w:b.w, h:b.h };
+        if (rectIntersect(soulRect, br)){
+          battle.bullets.splice(i,1);
+          i--;
+          if (battle.damageFlash <= 0){
+            let dmg = Math.max(1, battle.enemyAtk - stats.def);
+            stats.hp -= dmg;
+            battle.damageFlash = 0.3;
+            if (stats.hp <= 0){
+              endBattle("lose");
+              return;
+            }
+          }
+        }
+      }
+    }
+
+    function startAttackBar(){
+      if (!battle) return;
+      battle.substate = "attack-bar";
+      const box = battle.box;
+      battle.attackBar.active = true;
+      battle.attackBar.dir = 1;
+      battle.attackBar.pos = box.x - box.w/2 + 6;
+    }
+
+    function updateAttackBar(dt){
+      const bar = battle.attackBar;
+      const box = battle.box;
+      const minX = box.x - box.w/2 + 6;
+      const maxX = box.x + box.w/2 - 6;
+
+      bar.pos += bar.speed * bar.dir * dt;
+      if (bar.pos >= maxX){ bar.pos = maxX; bar.dir = -1; }
+      if (bar.pos <= minX){ bar.pos = minX; bar.dir = 1; }
+
+      if (wasPressed("confirm")){
+        const center = box.x;
+        const diff = Math.abs(bar.pos - center);
+        const maxDiff = (box.w/2) - 6;
+        const ratio = 1 - diff / maxDiff; // 接近 1 越准
+        const base = stats.atk + 4;
+        const bonus = Math.floor(ratio * 8);
+        let dmg = base + bonus - battle.enemyDef;
+        dmg = Math.max(1, dmg);
+        battle.enemyHp -= dmg;
+        battle.enemyFlash = 0.3;
+        battle.substate = "menu";
+        bar.active = false;
+
+        let lines = [
+          "你挥动了武器。",
+          "造成了 " + dmg + " 点伤害。"
+        ];
+        if (battle.enemyHp <= 0){
+          lines.push("幽灵碎片的轮廓缓缓散开。");
+        } else {
+          lines.push("它的碎片抖了一下，\n努力维持着形状。");
+        }
+
+        startDialog(lines, () => {
+          if (battle.enemyHp <= 0) {
+            endBattle("kill");
+          } else {
+            battle.canSpare = battle.canSpare || (battle.enemyHp <= battle.enemyMaxHp * 0.4);
+            startEnemyTurn();
+          }
+        });
+      }
+    }
+
+    function handleAct(){
+      if (!battle) return;
+      const options = ["鼓励", "安慰", "观察"];
+      const choice = options[battle.actIndex];
+
+      if (choice === "观察"){
+        startDialog([
+          "你仔细地看着幽灵碎片。",
+          "它的边缘一直在往外散，\n像是随时会消失。",
+          "它认真地盯着你，\n好像在确认自己被看见了。"
+        ], () => startEnemyTurn());
+      } else if (choice === "鼓励"){
+        battle.mood++;
+        let lines = [
+          "你轻声夸奖它\n『发光的方式很特别』。",
+          "幽灵碎片闪了一下，\n仿佛有点受宠若惊。"
+        ];
+        if (battle.mood >= 2 && !battle.canSpare){
+          lines.push("它的轮廓稳定下来，\n似乎不再想挡住你。");
+          battle.canSpare = true;
+        }
+        startDialog(lines, () => startEnemyTurn());
+      } else if (choice === "安慰"){
+        battle.mood += 2;
+        let lines = [
+          "你说：\n「就算只剩下一小块，\n  也还是你。」",
+          "幽灵碎片安静了很久。"
+        ];
+        if (battle.mood >= 2 && !battle.canSpare){
+          lines.push("它轻轻点头，\n战意基本消失了。");
+          battle.canSpare = true;
+        }
+        startDialog(lines, () => startEnemyTurn());
+      }
+    }
+
+    function useItem(){
+      if (!battle) return;
+      if (inventory.length === 0){
+        startDialog([
+          "你翻了翻口袋。",
+          "里面什么也没有。"
+        ], () => {
+          battle.substate = "menu";
+        });
+        return;
+      }
+      const item = inventory[battle.itemIndex];
+      stats.hp = Math.min(stats.maxHp, stats.hp + (item.heal || 0));
+      const heal = item.heal || 0;
+      const name = item.name;
+      inventory.splice(battle.itemIndex,1);
+      if (battle.itemIndex >= inventory.length){
+        battle.itemIndex = Math.max(0, inventory.length-1);
+      }
+
+      startDialog([
+        "你使用了 " + name + "。",
+        "回复了 " + heal + " 点 HP。"
+      ], () => startEnemyTurn());
+      battle.substate = "menu";
+    }
+
+    function endBattle(result){
+      if (!battle) return;
+      if (result === "lose"){
+        startDialog([
+          "你倒在了地上。",
+          "视线一点点暗了下去。",
+          "在最后的黑暗里，\n你想起了那颗闪着光的星星……"
+        ], () => loadFromSave());
+        return;
+      }
+
+      if (result === "kill"){
+        story.ghostKilled = true;
+        killCount++;
+        ghostNpc.active = false;
+      } else if (result === "spare"){
+        story.ghostSpared = true;
+        ghostNpc.active = false;
+      }
+
+      const exp = (result === "kill") ? battle.expGain : 0;
+      const gold = battle.goldGain;
+      stats.exp += exp;
+      stats.gold += gold;
+
+      // 简单升级
+      if (stats.exp >= 10 && stats.lv === 1){
+        stats.lv = 2;
+        stats.maxHp = 24;
+        stats.hp = stats.maxHp;
+        stats.atk = 6;
+      }
+
+      const lines = [];
+      if (result === "spare"){
+        lines.push("你选择了饶恕。");
+        lines.push("幽灵碎片轻轻点头，\n悄悄退回到墙缝里。");
+      } else {
+        lines.push("幽灵碎片在光点中消散。");
+      }
+      lines.push("你获得了 " + exp + " EXP 和 " + gold + " 金币。");
+
+      startDialog(lines, () => {
+        gameState = STATE_WORLD;
+        player.x = battleReturn.x;
+        player.y = battleReturn.y;
+        battle = null;
+        battleReturn = null;
+      });
+    }
+
+    function updateBattle(dt){
+      if (!battle) return;
+
+      if (battle.damageFlash > 0) battle.damageFlash = Math.max(0, battle.damageFlash - dt);
+      if (battle.enemyFlash > 0) battle.enemyFlash = Math.max(0, battle.enemyFlash - dt);
+
+      if (battle.substate === "enemy-turn"){
+        updateEnemyTurn(dt);
+        return;
+      }
+      if (battle.substate === "attack-bar"){
+        updateAttackBar(dt);
+        return;
+      }
+
+      if (battle.substate === "menu"){
+        if (wasPressed("left")){
+          battle.menuIndex = (battle.menuIndex + 3) % 4;
+        }
+        if (wasPressed("right")){
+          battle.menuIndex = (battle.menuIndex + 1) % 4;
+        }
+        if (wasPressed("confirm")){
+          if (battle.menuIndex === 0){ // FIGHT
+            startAttackBar();
+          } else if (battle.menuIndex === 1){ // ACT
+            battle.substate = "act-menu";
+            battle.actIndex = 0;
+          } else if (battle.menuIndex === 2){ // ITEM
+            battle.substate = "item-menu";
+            battle.itemIndex = 0;
+          } else if (battle.menuIndex === 3){ // MERCY
+            if (battle.canSpare){
+              endBattle("spare");
+            } else {
+              startDialog([
+                "你尝试饶恕它，",
+                "但它还没准备好立刻放人。"
+              ], () => startEnemyTurn());
+            }
+          }
+        }
+      } else if (battle.substate === "act-menu"){
+        const options = ["鼓励","安慰","观察"];
+        if (wasPressed("up")){
+          battle.actIndex = (battle.actIndex + options.length - 1) % options.length;
+        }
+        if (wasPressed("down")){
+          battle.actIndex = (battle.actIndex + 1) % options.length;
+        }
+        if (wasPressed("cancel")){
+          battle.substate = "menu";
+        }
+        if (wasPressed("confirm")){
+          handleAct();
+        }
+      } else if (battle.substate === "item-menu"){
+        if (inventory.length === 0){
+          startDialog(["你什么也没带来。"], () => {
+            battle.substate = "menu";
+          });
+          return;
+        }
+        if (wasPressed("up")){
+          battle.itemIndex = (battle.itemIndex + inventory.length - 1) % inventory.length;
+        }
+        if (wasPressed("down")){
+          battle.itemIndex = (battle.itemIndex + 1) % inventory.length;
+        }
+        if (wasPressed("cancel")){
+          battle.substate = "menu";
+        }
+        if (wasPressed("confirm")){
+          useItem();
+        }
+      }
+    }
+
+    function drawBattleButtons(bottom){
+      const btnW = 60;
+      const btnH = 18;
+      const gap = 8;
+      const firstX = bottom.x + 6;
+      const y = bottom.y + bottom.h - btnH - 4;
+
+      const labels = ["FIGHT","ACT","ITEM","MERCY"];
+
+      for (let i=0;i<4;i++){
+        const x = firstX + i * (btnW + gap);
+        const selected = (battle && battle.substate === "menu" && battle.menuIndex === i);
+        if (selected){
+          ctx.fillStyle = BATTLE_COLORS.buttonSelectedBg;
+          ctx.fillRect(x, y, btnW, btnH);
+          ctx.strokeStyle = BATTLE_COLORS.buttonSelectedBg;
+          ctx.strokeRect(x, y, btnW, btnH);
+          ctx.fillStyle = BATTLE_COLORS.buttonSelectedText;
+        } else {
+          ctx.fillStyle = "#000000";
+          ctx.fillRect(x, y, btnW, btnH);
+          ctx.strokeStyle = BATTLE_COLORS.button;
+          ctx.lineWidth = 1;
+          ctx.strokeRect(x, y, btnW, btnH);
+          ctx.fillStyle = BATTLE_COLORS.buttonText;
+        }
+
+        // 图标（超简化）
+        ctx.save();
+        ctx.translate(x+8, y+btnH/2);
+        ctx.strokeStyle = ctx.fillStyle;
+        ctx.lineWidth = 1;
+        if (i === 0){ // FIGHT: 小剑
+          ctx.beginPath();
+          ctx.moveTo(-2,-4);
+          ctx.lineTo(2,0);
+          ctx.lineTo(-2,4);
+          ctx.stroke();
+        } else if (i === 1){ // ACT: 小声波
+          ctx.beginPath();
+          ctx.arc(0,0,2, -Math.PI/2, Math.PI/2);
+          ctx.stroke();
+        } else if (i === 2){ // ITEM: 小袋子
+          ctx.beginPath();
+          ctx.rect(-3,-3,6,6);
+          ctx.stroke();
+        } else if (i === 3){ // MERCY: X
+          ctx.beginPath();
+          ctx.moveTo(-3,-3); ctx.lineTo(3,3);
+          ctx.moveTo(3,-3); ctx.lineTo(-3,3);
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        ctx.font = "10px 'Courier New', monospace";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillText(labels[i], x+16, y+btnH/2);
+      }
+    }
+
+    function drawBattle(){
+      if (!battle) return;
+      const rects = getBattleRects();
+      const { top, textBox, bottom } = rects;
+
+      // 背景
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0,0,WIDTH,HEIGHT);
+
+      // 上半场矩形 + 网格（模仿原版）
+      ctx.strokeStyle = BATTLE_COLORS.border;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(top.x, top.y, top.w, top.h);
+
+      ctx.strokeStyle = BATTLE_COLORS.grid;
+      ctx.lineWidth = 1;
+      // 纵向网格
+      const vStep = 32;
+      for (let x = top.x + vStep; x < top.x + top.w; x += vStep){
+        ctx.beginPath();
+        ctx.moveTo(x, top.y);
+        ctx.lineTo(x, top.y + top.h);
+        ctx.stroke();
+      }
+      // 横向网格
+      const hStep = 24;
+      for (let y = top.y + hStep; y < top.y + top.h; y += hStep){
+        ctx.beginPath();
+        ctx.moveTo(top.x, y);
+        ctx.lineTo(top.x + top.w, y);
+        ctx.stroke();
+      }
+
+      // 敌人 "sprite"（简化）
+      const enemyX = top.x + top.w/2;
+      const enemyY = top.y + 32;
+      ctx.save();
+      if (battle.enemyFlash > 0){
+        ctx.globalAlpha = 0.4 + 0.6*Math.sin(battle.enemyFlash*20);
+      }
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(enemyX, enemyY, 14, Math.PI, 0);
+      ctx.lineTo(enemyX+14, enemyY+10);
+      ctx.lineTo(enemyX-14, enemyY+10);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = "#000";
+      ctx.fillRect(enemyX-5, enemyY-3,2,2);
+      ctx.fillRect(enemyX+3, enemyY-3,2,2);
+
+      // 灵魂活动方框（白色方框）
+      const box = battle.box;
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(box.x - box.w/2, box.y - box.h/2, box.w, box.h);
+
+      // 子弹
+      ctx.fillStyle = "#ffffff";
+      for (let b of battle.bullets){
+        ctx.fillRect(b.x - b.w/2, b.y - b.h/2, b.w, b.h);
+      }
+
+      // 灵魂（红心）
+      ctx.save();
+      ctx.fillStyle = (battle.damageFlash > 0) ? "#ff8080" : "#ff3333";
+      ctx.fillRect(battle.soul.x - battle.soul.w/2,
+                   battle.soul.y - battle.soul.h/2,
+                   battle.soul.w, battle.soul.h);
+      ctx.restore();
+
+      // 下方状态栏（仿原版）
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(bottom.x, bottom.y, bottom.w, bottom.h);
+
+      // 名字 / LV / HP
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "10px 'Courier New', monospace";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+
+      const nameX = bottom.x + 6;
+      const nameY = bottom.y + 4;
+      ctx.fillText(PLAYER_NAME, nameX, nameY);
+
+      const lvX = nameX + 60;
+      ctx.fillText("LV " + stats.lv, lvX, nameY);
+
+      const hpLabelX = lvX + 40;
+      ctx.fillText("HP", hpLabelX, nameY);
+
+      // HP 黄色条
+      const barX = hpLabelX + 20;
+      const barY = nameY + 1;
+      const barW = 60;
+      const barH = 8;
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(barX, barY, barW, barH);
+      ctx.fillStyle = BATTLE_COLORS.hpBar;
+      const pct = clamp(stats.hp / stats.maxHp, 0, 1);
+      ctx.fillRect(barX+1, barY+1, (barW-2)*pct, barH-2);
+
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "left";
+      ctx.fillText(stats.hp + " / " + stats.maxHp, barX + barW + 6, nameY);
+
+      // 左下角：敌人名字（简化）
+      ctx.textAlign = "left";
+      ctx.textBaseline = "bottom";
+      ctx.fillText(battle.enemyName, bottom.x + 6, bottom.y + bottom.h - 22);
+
+      // 画菜单按钮
+      drawBattleButtons(bottom);
+
+      // ACT / ITEM 子菜单提示（绘在 textBox 内部，但不单独再画框；文本就好）
+      if (battle.substate === "act-menu" || battle.substate === "item-menu"){
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "10px 'Courier New', monospace";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "top";
+        const listY = bottom.y + 4 + 12;
+        if (battle.substate === "act-menu"){
+          const opts = ["鼓励","安慰","观察"];
+          for (let i=0;i<opts.length;i++){
+            const prefix = (i === battle.actIndex) ? ">" : " ";
+            ctx.fillText(prefix + " " + opts[i], bottom.x + 6, listY + i*10);
+          }
+        } else {
+          if (inventory.length === 0){
+            ctx.fillText("(没有物品)", bottom.x + 6, listY);
+          } else {
+            for (let i=0;i<inventory.length;i++){
+              const prefix = (i === battle.itemIndex) ? ">" : " ";
+              ctx.fillText(prefix + " " + inventory[i].name, bottom.x + 6, listY + i*10);
+            }
+          }
+        }
+        ctx.textAlign = "right";
+        ctx.fillText("X 返回", bottom.x + bottom.w - 6, bottom.y + bottom.h - 22);
+      }
+
+      // 攻击条（在方框顶部）
+      if (battle.substate === "attack-bar" && battle.attackBar.active){
+        const barY = box.y - box.h/2 + 10;
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(box.x - box.w/2 + 6, barY);
+        ctx.lineTo(box.x + box.w/2 - 6, barY);
+        ctx.stroke();
+        ctx.fillStyle = "#ffcc00";
+        ctx.fillRect(battle.attackBar.pos - 2, barY - 4, 4, 8);
+      }
+    }
+
+    // ========= 主循环 =========
+    let lastTime = 0;
+    function update(dt){
+      if (dialog){
+        if (wasPressed("confirm")) advanceDialog();
+        return;
+      }
+      if (gameState === STATE_TITLE) updateTitle(dt);
+      else if (gameState === STATE_WORLD) updateWorld(dt);
+      else if (gameState === STATE_BATTLE) updateBattle(dt);
+    }
+
+    function draw(){
+      if (gameState === STATE_TITLE) drawTitle();
+      else if (gameState === STATE_WORLD) drawWorld();
+      else if (gameState === STATE_BATTLE) drawBattle();
+      if (dialog) drawDialog();
+    }
+
+    function loop(timestamp){
+      const dt = (timestamp - lastTime)/1000 || 0;
+      lastTime = timestamp;
+      update(dt);
+      draw();
+      prevInput = { ...input };
+      requestAnimationFrame(loop);
+    }
+
+    // ========= 启动 =========
+    setupKeyboard();
+    setupTouchControls();
+    resetGame();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
