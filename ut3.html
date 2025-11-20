@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Undertale: The HTML Soul</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        body {
+            background-color: #000;
+            color: white;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: 'Press Start 2P', monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            touch-action: none; /* 禁止移动端默认触摸行为 */
+        }
+
+        #game-container {
+            position: relative;
+            width: 640px;
+            height: 480px;
+            background-color: black;
+            border: 2px solid #333;
+            transform-origin: top center;
+        }
+
+        canvas {
+            display: block;
+            image-rendering: pixelated;
+        }
+
+        /* UI 层: 对话框等 */
+        #ui-layer {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            height: 140px;
+            pointer-events: none;
+            display: none;
+        }
+
+        .dialogue-box {
+            border: 4px solid white;
+            background: black;
+            padding: 15px;
+            height: 100%;
+            box-sizing: border-box;
+            font-size: 18px;
+            line-height: 1.5;
+        }
+
+        /* 移动端虚拟键盘 */
+        #virtual-controls {
+            position: fixed;
+            bottom: 20px;
+            width: 100%;
+            height: 200px;
+            pointer-events: none; /* 让点击穿透到按钮 */
+            display: none; /* 默认隐藏，JS控制显示 */
+            z-index: 100;
+        }
+
+        .d-pad {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 150px;
+            height: 150px;
+            pointer-events: auto;
+        }
+
+        .action-buttons {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 160px;
+            height: 100px;
+            pointer-events: auto;
+        }
+
+        .btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            position: absolute;
+            border-radius: 50%;
+            touch-action: none;
+        }
+        
+        .btn:active { background: rgba(255, 255, 255, 0.5); }
+
+        /* D-Pad positioning */
+        #btn-up { top: 0; left: 50px; width: 50px; height: 50px; }
+        #btn-down { bottom: 0; left: 50px; width: 50px; height: 50px; }
+        #btn-left { top: 50px; left: 0; width: 50px; height: 50px; }
+        #btn-right { top: 50px; right: 0; width: 50px; height: 50px; }
+
+        /* Action Buttons */
+        #btn-z { bottom: 0; left: 0; width: 70px; height: 70px; border-radius: 50%; background: rgba(0, 255, 0, 0.2); }
+        #btn-z::after { content: 'Z'; position: absolute; top: 20px; left: 26px; color: white; }
+        #btn-x { top: -20px; right: 0; width: 60px; height: 60px; border-radius: 50%; background: rgba(255, 0, 0, 0.2); }
+        #btn-x::after { content: 'X'; position: absolute; top: 16px; left: 22px; color: white; }
+
+        #toggle-controls {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 200;
+            background: #333;
+            color: white;
+            border: 1px solid white;
+            padding: 5px 10px;
+            font-family: 'Press Start 2P';
+            font-size: 10px;
+            cursor: pointer;
+            opacity: 0.7;
+        }
+
+        /* 响应式缩放 */
+        @media (max-width: 700px) {
+            #game-container {
+                transform: scale(0.55); /* 简单缩放适配手机 */
+            }
+            #virtual-controls {
+                display: block; /* 手机端默认显示 */
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <button id="toggle-controls">开关虚拟键盘</button>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="640" height="480"></canvas>
+    </div>
+
+    <!-- 虚拟控制器 -->
+    <div id="virtual-controls">
+        <div class="d-pad">
+            <div id="btn-up" class="btn"></div>
+            <div id="btn-down" class="btn"></div>
+            <div id="btn-left" class="btn"></div>
+            <div id="btn-right" class="btn"></div>
+        </div>
+        <div class="action-buttons">
+            <div id="btn-z" class="btn"></div>
+            <div id="btn-x" class="btn"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- 引擎核心与常量 ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        const STATE = {
+            OVERWORLD: 0,
+            DIALOGUE: 1,
+            BATTLE_MENU: 2,
+            BATTLE_DIALOGUE: 3,
+            BATTLE_DODGE: 4,
+            BATTLE_VICTORY: 5,
+            GAMEOVER: 6
+        };
+
+        let gameState = STATE.OVERWORLD;
+        let frameCount = 0;
+
+        // 输入处理
+        const Input = {
+            up: false, down: false, left: false, right: false, z: false, x: false,
+            zPressed: false, xPressed: false // 单次触发标记
+        };
+
+        // --- 游戏数据与实体 ---
+        
+        // 玩家（主世界）
+        const player = {
+            x: 320, y: 400, w: 20, h: 20, speed: 4, color: 'red',
+            direction: 'down', moving: false
+        };
+
+        // 战斗属性
+        const battleStats = {
+            hp: 20, maxHp: 20, name: "FRISK", lv: 1
+        };
+
+        // 敌人数据
+        const enemy = {
+            name: "HTML 幽灵",
+            hp: 50, maxHp: 50,
+            dialogue: ["代码... 乱糟糟...", "你是另一个bug吗？", "请不要删库..."],
+            spared: false,
+            canSpare: false
+        };
+
+        // 战斗框
+        let battleBox = { x: 32, y: 250, w: 576, h: 140, targetW: 576, targetH: 140 };
+        // 战斗心形
+        const soul = { x: 320, y: 320, size: 16, speed: 3, invulnerable: 0 };
+
+        // 弹幕
+        let bullets = [];
+
+        // UI 文本
+        let currentText = "";
+        let textTimer = 0;
+        let textIndex = 0;
+        let dialogueQueue = [];
+        
+        // 战斗菜单选择
+        let menuIndex = 0; // 0:Fight, 1:Act, 2:Item, 3:Mercy
+        let subMenuIndex = 0;
+        let battlePhase = 'menu'; // menu, subMenu, attackAnim, enemyTalk, dodge
+        let enemyTurnTimer = 0;
+
+        // --- 输入监听 ---
+
+        const keyMap = {
+            'ArrowUp': 'up', 'ArrowDown': 'down', 'ArrowLeft': 'left', 'ArrowRight': 'right',
+            'z': 'z', 'Z': 'z', 'Enter': 'z',
+            'x': 'x', 'X': 'x', 'Shift': 'x'
+        };
+
+        window.addEventListener('keydown', (e) => {
+            if (keyMap[e.key]) {
+                Input[keyMap[e.key]] = true;
+                if (keyMap[e.key] === 'z') Input.zPressed = true;
+                if (keyMap[e.key] === 'x') Input.xPressed = true;
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (keyMap[e.key]) Input[keyMap[e.key]] = false;
+        });
+
+        // 触摸控制逻辑
+        function setupTouch(id, key) {
+            const el = document.getElementById(id);
+            el.addEventListener('touchstart', (e) => { e.preventDefault(); Input[key] = true; if(key==='z') Input.zPressed=true; if(key==='x') Input.xPressed=true; });
+            el.addEventListener('touchend', (e) => { e.preventDefault(); Input[key] = false; });
+        }
+        setupTouch('btn-up', 'up'); setupTouch('btn-down', 'down');
+        setupTouch('btn-left', 'left'); setupTouch('btn-right', 'right');
+        setupTouch('btn-z', 'z'); setupTouch('btn-x', 'x');
+
+        // 虚拟键盘开关
+        const toggleBtn = document.getElementById('toggle-controls');
+        const vControls = document.getElementById('virtual-controls');
+        toggleBtn.addEventListener('click', () => {
+            if (vControls.style.display === 'none') {
+                vControls.style.display = 'block';
+            } else {
+                vControls.style.display = 'none';
+            }
+        });
+
+        // --- 绘图辅助 ---
+        function drawRect(x, y, w, h, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(x, y, w, h);
+        }
+
+        function drawText(text, x, y, size = 20, color = 'white', align = 'left') {
+            ctx.fillStyle = color;
+            ctx.font = `${size}px "Press Start 2P"`;
+            ctx.textAlign = align;
+            ctx.fillText(text, x, y);
+        }
+
+        function drawHeart(x, y, color='red') {
+            // 简易像素心形
+            ctx.fillStyle = color;
+            ctx.fillRect(x-2, y-6, 4, 2); // Top bumps
+            ctx.fillRect(x-6, y-4, 12, 6); // Upper body
+            ctx.fillRect(x-4, y+2, 8, 2); // Lower body taper 1
+            ctx.fillRect(x-2, y+4, 4, 2); // Lower body taper 2
+            ctx.fillRect(x-1, y+6, 2, 2); // Tip
+        }
+
+        // --- 游戏逻辑：主世界 ---
+
+        // 简单的地图数据 (1=Wall, 2=Event)
+        const mapData = [
+            "11111111111111111111",
+            "10000000000000000001",
+            "10000000000000000001",
+            "10000011111100000001",
+            "10000010000100000001",
+            "10000010200000000001", // 2 is the trigger
+            "10000011101100000001",
+            "10000000000000000001",
+            "10000000000000000001",
+            "11111110011111111111",
+            "00000010010000000000",
+            "00000010010000000000",
+            "00000010000000000000",
+            "00000011110000000000",
+        ];
+        const TILE_SIZE = 32;
+
+        function updateOverworld() {
+            let prevX = player.x;
+            let prevY = player.y;
+
+            player.moving = false;
+            if (Input.up) { player.y -= player.speed; player.direction = 'up'; player.moving = true; }
+            if (Input.down) { player.y += player.speed; player.direction = 'down'; player.moving = true; }
+            if (Input.left) { player.x -= player.speed; player.direction = 'left'; player.moving = true; }
+            if (Input.right) { player.x += player.speed; player.direction = 'right'; player.moving = true; }
+
+            // 碰撞检测
+            let tileX = Math.floor((player.x + player.w/2) / TILE_SIZE);
+            let tileY = Math.floor((player.y + player.h/2) / TILE_SIZE);
+            
+            // 简单的边界检查
+            if (tileY >= 0 && tileY < mapData.length && tileX >= 0 && tileX < mapData[0].length) {
+                let char = mapData[tileY][tileX];
+                if (char === '1') {
+                    player.x = prevX;
+                    player.y = prevY;
+                }
+                // 触发战斗
+                if (char === '2' && Input.zPressed) {
+                    startDialogue(["你面前漂浮着一团破碎的代码。", "它似乎想要和你战斗！"], () => {
+                        initBattle();
+                    });
+                }
+            }
+        }
+
+        function drawOverworld() {
+            // 绘制地图
+            for(let y=0; y<mapData.length; y++) {
+                for(let x=0; x<mapData[y].length; x++) {
+                    let char = mapData[y][x];
+                    let px = x * TILE_SIZE;
+                    let py = y * TILE_SIZE;
+                    if (char === '1') drawRect(px, py, TILE_SIZE, TILE_SIZE, '#444'); // Wall
+                    if (char === '2') { // Trigger Object
+                        drawRect(px+8, py+8, 16, 16, 'white'); 
+                    }
+                }
+            }
+
+            // 绘制玩家
+            // 简单动画：如果移动中，稍微改变形状
+            let bounce = (player.moving && Math.floor(Date.now()/100)%2===0) ? -2 : 0;
+            drawRect(player.x, player.y + bounce, player.w, player.h, player.color);
+            
+            // 绘制 UI 提示
+            let tileX = Math.floor((player.x + player.w/2) / TILE_SIZE);
+            let tileY = Math.floor((player.y + player.h/2) / TILE_SIZE);
+            if (mapData[tileY] && mapData[tileY][tileX] === '2') {
+                drawText("[Z] 检查", player.x - 20, player.y - 10, 12, '#aaa');
+            }
+            
+            drawText("使用方向键移动, Z确认, X取消", 10, 460, 12, '#888');
+        }
+
+        // --- 对话系统 ---
+        function startDialogue(lines, callback) {
+            dialogueQueue = lines;
+            textIndex = 0;
+            currentText = "";
+            gameState = STATE.DIALOGUE;
+            window.onDialogueEnd = callback;
+        }
+
+        function updateDialogue() {
+            if (Input.zPressed) {
+                if (currentText.length < dialogueQueue[0].length) {
+                    currentText = dialogueQueue[0]; // 快进
+                } else {
+                    dialogueQueue.shift();
+                    currentText = "";
+                    textIndex = 0;
+                    if (dialogueQueue.length === 0) {
+                        if (window.onDialogueEnd) window.onDialogueEnd();
+                    }
+                }
+                Input.zPressed = false; // Consume input
+            }
+
+            // 打字机效果
+            if (dialogueQueue.length > 0) {
+                if (textIndex < dialogueQueue[0].length) {
+                    currentText += dialogueQueue[0][textIndex];
+                    textIndex++;
+                }
+            }
+        }
+
+        function drawDialogueBox(x, y, w, h, text) {
+            drawRect(x, y, w, h, 'white');
+            drawRect(x+4, y+4, w-8, h-8, 'black');
+            // 文本换行处理（简化版）
+            let words = text.split("");
+            let line = "";
+            let ly = y + 30;
+            let lx = x + 20;
+            for(let i=0; i<words.length; i++) {
+                line += words[i];
+                if (ctx.measureText(line).width > w - 40) {
+                    drawText(line, lx, ly, 20);
+                    line = "";
+                    ly += 30;
+                }
+            }
+            drawText(line, lx, ly, 20);
+            
+            // 闪烁的继续图标
+            if (textIndex >= (dialogueQueue[0]||"").length && Math.floor(Date.now()/400)%2===0) {
+                 drawText("*", x + w - 30, y + h - 20, 20, 'yellow');
+            }
+        }
+
+        // --- 战斗系统 ---
+
+        function initBattle() {
+            gameState = STATE.BATTLE_MENU;
+            battlePhase = 'menu';
+            menuIndex = 0;
+            battleBox = { x: 32, y: 250, w: 576, h: 140 };
+            soul.x = 32 + 40; 
+            soul.y = 250 + 70;
+            currentText = "HTML 幽灵挡住了去路！";
+        }
+
+        function updateBattle() {
+            // 战斗框缓动
+            battleBox.x += (32 - battleBox.x) * 0.1;
+            battleBox.w += (576 - battleBox.w) * 0.1;
+            battleBox.h += (140 - battleBox.h) * 0.1;
+
+            if (battlePhase === 'menu') {
+                // 选择 Fight/Act/Item/Mercy
+                if (Input.left && Input.zPressed === false) { menuIndex = (menuIndex - 1 + 4) % 4; Input.left=false; } // Debounce simple
+                if (Input.right && Input.zPressed === false) { menuIndex = (menuIndex + 1) % 4; Input.right=false; }
+                
+                if (Input.zPressed) {
+                    Input.zPressed = false;
+                    battlePhase = 'subMenu';
+                    subMenuIndex = 0;
+                }
+            } 
+            else if (battlePhase === 'subMenu') {
+                if (Input.xPressed) {
+                    battlePhase = 'menu';
+                    currentText = "HTML 幽灵挡住了去路！";
+                    Input.xPressed = false;
+                    return;
+                }
+
+                // 简化子菜单逻辑
+                if (Input.zPressed) {
+                    Input.zPressed = false;
+                    // 执行行动
+                    if (menuIndex === 0) { // FIGHT
+                        // 简单处理：直接伤害
+                        enemy.hp -= 20;
+                        currentText = "你攻击了！造成 20 点伤害。";
+                        triggerEnemyTurn();
+                    } else if (menuIndex === 1) { // ACT
+                        if (subMenuIndex === 0) { // Check
+                            currentText = "HTML 幽灵 - ATK 5 DEF 0. 喜欢嵌套 div。";
+                            triggerEnemyTurn();
+                        } else { // Debug (Spare condition)
+                            currentText = "你修复了一个语法错误。幽灵很高兴！";
+                            enemy.canSpare = true;
+                            triggerEnemyTurn();
+                        }
+                    } else if (menuIndex === 2) { // ITEM
+                        if (battleStats.hp < battleStats.maxHp) {
+                            battleStats.hp = Math.min(battleStats.hp + 10, battleStats.maxHp);
+                            currentText = "你吃了一块 cookie。HP 恢复了。";
+                        } else {
+                            currentText = "你的 HP 已满。";
+                        }
+                        triggerEnemyTurn();
+                    } else if (menuIndex === 3) { // MERCY
+                        if (enemy.canSpare) {
+                            gameState = STATE.BATTLE_VICTORY;
+                            currentText = "你宽恕了幽灵。";
+                        } else {
+                            currentText = "幽灵还不想停止执行代码。";
+                            triggerEnemyTurn();
+                        }
+                    }
+                }
+                
+                // 只有 ACT 有选项移动
+                if (menuIndex === 1) {
+                    if (Input.up || Input.down) { subMenuIndex = (subMenuIndex===0?1:0); Input.up=false; Input.down=false; }
+                }
+            }
+            else if (battlePhase === 'enemyTalk') {
+                if (Input.zPressed) {
+                    Input.zPressed = false;
+                    startDodgePhase();
+                }
+            }
+            else if (battlePhase === 'dodge') {
+                // 玩家移动 (在框内)
+                if (Input.up && soul.y > battleBox.y + 10) soul.y -= soul.speed;
+                if (Input.down && soul.y < battleBox.y + battleBox.h - 10) soul.y += soul.speed;
+                if (Input.left && soul.x > battleBox.x + 10) soul.x -= soul.speed;
+                if (Input.right && soul.x < battleBox.x + battleBox.w - 10) soul.x += soul.speed;
+
+                // 子弹逻辑
+                enemyTurnTimer--;
+                if (enemyTurnTimer % 10 === 0) {
+                    // 发射子弹
+                    let side = Math.random() > 0.5 ? -1 : 1;
+                    bullets.push({
+                        x: 320 + (side * 200),
+                        y: 200 + Math.random() * 100,
+                        vx: -side * 4,
+                        vy: Math.sin(Date.now()/100) * 2,
+                        size: 6
+                    });
+                }
+
+                for (let i = bullets.length - 1; i >= 0; i--) {
+                    let b = bullets[i];
+                    b.x += b.vx;
+                    b.y += b.vy;
+                    
+                    // 碰撞检测 (简单矩形)
+                    if (Math.abs(b.x - soul.x) < 10 && Math.abs(b.y - soul.y) < 10) {
+                        if (soul.invulnerable <= 0) {
+                            battleStats.hp -= 5;
+                            soul.invulnerable = 60; // 1秒无敌
+                        }
+                    }
+
+                    if (b.x < 0 || b.x > 640) bullets.splice(i, 1);
+                }
+
+                if (soul.invulnerable > 0) soul.invulnerable--;
+
+                if (battleStats.hp <= 0) {
+                    gameState = STATE.GAMEOVER;
+                }
+
+                if (enemyTurnTimer <= 0) {
+                    // 结束回合
+                    battlePhase = 'menu';
+                    currentText = "HTML 幽灵正在等待请求...";
+                    // 检查敌人死亡
+                    if (enemy.hp <= 0) {
+                        gameState = STATE.BATTLE_VICTORY;
+                        currentText = "你获胜了！获得了 0 XP。";
+                    }
+                }
+            }
+        }
+
+        function triggerEnemyTurn() {
+            battlePhase = 'enemyTalk';
+            // 改变盒子大小 (缩小用于躲避)
+            // 这里简化，保持盒子大小，但在完整游戏中会调整 battleBox.targetW
+            currentText = enemy.dialogue[Math.floor(Math.random() * enemy.dialogue.length)];
+        }
+
+        function startDodgePhase() {
+            battlePhase = 'dodge';
+            enemyTurnTimer = 300; // 5秒
+            bullets = [];
+            battleBox.x = 220; battleBox.w = 200;
+            battleBox.h = 200; battleBox.y = 140;
+            soul.x = 320; soul.y = 240;
+        }
+
+        function drawBattle() {
+            // 绘制敌人
+            let wiggle = Math.sin(Date.now()/300) * 5;
+            let ghostOpacity = enemy.canSpare ? 0.5 : 1.0;
+            ctx.globalAlpha = ghostOpacity;
+            drawRect(280 + wiggle, 50, 80, 100, 'white'); // 敌人主体
+            drawRect(290 + wiggle, 70, 20, 20, 'black'); // 眼
+            drawRect(330 + wiggle, 70, 20, 20, 'black'); // 眼
+            ctx.globalAlpha = 1.0;
+
+            // 敌人伤害显示
+            if (battlePhase === 'menu' && enemy.hp < enemy.maxHp) {
+                drawRect(250, 30, 140, 10, 'red');
+                drawRect(250, 30, 140 * (enemy.hp/enemy.maxHp), 10, '#0f0');
+            }
+
+            // 绘制战斗框
+            drawRect(battleBox.x, battleBox.y, battleBox.w, battleBox.h, 'white');
+            drawRect(battleBox.x+4, battleBox.y+4, battleBox.w-8, battleBox.h-8, 'black');
+
+            // 菜单阶段绘制文本
+            if (battlePhase === 'menu' || battlePhase === 'subMenu' || battlePhase === 'enemyTalk') {
+                drawText("* " + currentText, battleBox.x + 20, battleBox.y + 40, 18);
+            }
+
+            // 子菜单选项
+            if (battlePhase === 'subMenu') {
+                if (menuIndex === 1) { // ACT
+                    drawText("* 检查", battleBox.x + 40, battleBox.y + 80, 18);
+                    drawText("* 调试 (Debug)", battleBox.x + 40, battleBox.y + 110, 18);
+                    drawHeart(battleBox.x + 25, battleBox.y + 75 + (subMenuIndex*30));
+                }
+            }
+
+            // 躲避阶段绘制
+            if (battlePhase === 'dodge') {
+                // 玩家
+                if (Math.floor(soul.invulnerable / 5) % 2 === 0) { // 闪烁效果
+                    drawHeart(soul.x, soul.y, 'red');
+                }
+                // 子弹
+                ctx.fillStyle = 'white';
+                bullets.forEach(b => {
+                    ctx.fillRect(b.x, b.y, b.size, b.size);
+                });
+            }
+
+            // 绘制底部 UI (HP, LV)
+            let uiY = 420;
+            drawText(battleStats.name + "   LV " + battleStats.lv, 30, uiY + 30);
+            
+            // HP Bar
+            drawText("HP", 250, uiY + 30, 14);
+            drawRect(280, uiY+15, 100, 20, 'red'); // Max
+            drawRect(280, uiY+15, 100 * (battleStats.hp / battleStats.maxHp), 20, 'yellow'); // Current
+            drawText(battleStats.hp + " / " + battleStats.maxHp, 400, uiY + 30);
+
+            // 绘制四个大按钮 (Fight, Act, Item, Mercy)
+            if (battlePhase !== 'dodge') {
+                const btns = ["FIGHT", "ACT", "ITEM", "MERCY"];
+                const btnColors = ["#ffaa00", "#00aaff", "#00aa00", "#aa00ff"];
+                for (let i = 0; i < 4; i++) {
+                    let bx = 32 + i * 150;
+                    let by = 440;
+                    let color = (menuIndex === i && battlePhase === 'menu') ? 'yellow' : '#f60';
+                    if (menuIndex === i && battlePhase === 'menu') drawHeart(bx + 14, by + 24);
+                    
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(bx, by, 140, 35);
+                    drawText(btns[i], bx + 35, by + 26, 20, color);
+                }
+            }
+        }
+
+        function drawVictory() {
+            drawRect(100, 100, 440, 200, 'white');
+            drawRect(104, 104, 432, 192, 'black');
+            drawText("YOU WON!", 240, 200, 30, 'yellow', 'center');
+            drawText(currentText, 320, 250, 16, 'white', 'center');
+            drawText("按 Z 重新开始", 320, 280, 12, 'gray', 'center');
+            
+            if (Input.zPressed) location.reload();
+        }
+
+        function drawGameOver() {
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, 640, 480);
+            drawHeart(320, 200, '#333'); // Broken heart placeholder
+            drawText("GAME OVER", 320, 150, 40, 'white', 'center');
+            drawText("保持决心...", 320, 300, 20, 'white', 'center');
+            drawText("按 Z 重新开始", 320, 350, 12, 'gray', 'center');
+
+            if (Input.zPressed) location.reload();
+        }
+
+        // --- 游戏主循环 ---
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            frameCount++;
+
+            // Reset single-frame flags at the end of loop usually, but doing inside handlers
+            
+            if (gameState === STATE.OVERWORLD) {
+                updateOverworld();
+                drawOverworld();
+            } else if (gameState === STATE.DIALOGUE) {
+                updateDialogue();
+                drawOverworld(); // Keep BG
+                drawDialogueBox(50, 300, 540, 150, currentText);
+            } else if (gameState >= STATE.BATTLE_MENU && gameState <= STATE.BATTLE_DODGE) {
+                updateBattle();
+                drawBattle();
+            } else if (gameState === STATE.BATTLE_VICTORY) {
+                drawBattle(); // keep bg
+                drawVictory();
+            } else if (gameState === STATE.GAMEOVER) {
+                drawGameOver();
+            }
+
+            // Input cleanup for "Pressed" states
+            Input.zPressed = false; 
+            Input.xPressed = false;
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Start
+        gameLoop();
+
+    </script>
+</body>
+</html>
