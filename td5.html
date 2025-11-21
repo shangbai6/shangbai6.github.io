@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>星穹旅客：遗迹之星 - 小型RPG Demo</title>
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      background: #050816;
+      color: #f5f5f5;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    #game {
+      margin: auto;
+      width: 100%;
+      max-width: 640px;
+      padding: 12px 12px 80px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    h1 {
+      font-size: 20px;
+      margin: 0 0 4px;
+      text-align: center;
+    }
+
+    #subtitle {
+      font-size: 12px;
+      opacity: 0.8;
+      text-align: center;
+      margin-bottom: 4px;
+    }
+
+    #storyBox, #goalBox {
+      background: rgba(5,12,32,0.9);
+      border-radius: 12px;
+      padding: 8px 10px;
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+
+    #storyBox {
+      min-height: 80px;
+    }
+
+    #goalBox {
+      font-size: 12px;
+      opacity: 0.9;
+      border: 1px solid rgba(90,120,255,0.4);
+    }
+
+    #map {
+      background: #070a14;
+      border-radius: 12px;
+      padding: 4px;
+      display: grid;
+      gap: 2px;
+      width: 100%;
+    }
+
+    .tile {
+      position: relative;
+      border-radius: 4px;
+      border: 1px solid #1b2138;
+      font-size: 11px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 1px;
+      overflow: hidden;
+      aspect-ratio: 1 / 1;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .tile.wall {
+      background: #111827;
+    }
+
+    .tile.floor {
+      background: radial-gradient(circle at 20% 0%, #1f2937, #020617);
+    }
+
+    .tile.npc {
+      background: linear-gradient(135deg,#1f2937,#4b5563);
+    }
+
+    .tile.exit {
+      background: linear-gradient(135deg,#0f172a,#22c55e);
+    }
+
+    .tile.core {
+      background: linear-gradient(135deg,#1f2937,#f97316);
+      box-shadow: 0 0 8px rgba(251,146,60,0.8);
+    }
+
+    .tile span {
+      opacity: 0.9;
+      pointer-events: none;
+    }
+
+    .tile.player::after {
+      content: "主";
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 14px;
+      text-shadow: 0 0 4px #000;
+      background: radial-gradient(circle,#38bdf8 0,#0ea5e9 35%,transparent 65%);
+    }
+
+    #hint {
+      font-size: 11px;
+      opacity: 0.7;
+      text-align: center;
+    }
+
+    #controls {
+      margin-top: 6px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    #controls .row {
+      display: flex;
+      gap: 10px;
+    }
+
+    #controls button {
+      width: 64px;
+      height: 64px;
+      border-radius: 999px;
+      border: none;
+      background: #111827;
+      box-shadow: 0 0 8px rgba(15,23,42,0.9);
+      font-size: 24px;
+      color: #e5e7eb;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: manipulation;
+    }
+
+    #controls button:active {
+      transform: scale(0.95);
+      box-shadow: 0 0 4px rgba(129,140,248,0.8);
+      background: #1e293b;
+    }
+
+    @media (max-width:480px) {
+      #game {
+        padding: 8px 8px 70px;
+      }
+      #controls button {
+        width: 56px;
+        height: 56px;
+        font-size: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+<div id="game">
+  <div>
+    <h1>星穹旅客：遗迹之星</h1>
+    <div id="subtitle">小型网页RPG Demo（点按方向键移动，⚡ 交互）</div>
+  </div>
+
+  <div id="storyBox"></div>
+  <div id="goalBox"></div>
+  <div id="map"></div>
+  <div id="hint">键盘支持：WASD / 方向键移动，空格或回车交互。</div>
+
+  <div id="controls">
+    <div class="row">
+      <button data-btn="up">↑</button>
+    </div>
+    <div class="row">
+      <button data-btn="left">←</button>
+      <button data-btn="action">⚡</button>
+      <button data-btn="right">→</button>
+    </div>
+    <div class="row">
+      <button data-btn="down">↓</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ------------ 地图与世界设定 ------------
+  const AREAS = {
+    train: {
+      key: "train",
+      name: "极光快车 · 车厢",
+      intro: "你在一节老旧却闪着星芒的列车车厢中醒来。窗外是无垠星海，星轨如光之铁道在黑暗中延展。",
+      tiles: [
+        "#############",
+        "#..C.....K.E#",
+        "#...........#",
+        "#.....P.....#",
+        "#...........#",
+        "#############"
+      ]
+    },
+    outpost: {
+      key: "outpost",
+      name: "卡尔墨斯 · 沙漠前哨站",
+      intro: "黄沙在能量护盾外咆哮，前哨站的灯光在风暴中忽明忽暗。虚空风暴正在靠近。",
+      tiles: [
+        "#############",
+        "#....L......#",
+        "#.........E.#",
+        "#..G....P...#",
+        "#...........#",
+        "#############"
+      ]
+    },
+    ruins: {
+      key: "ruins",
+      name: "遗迹深处 · 虚空核心",
+      intro: "古老的石柱与金属骨架交错，中央悬浮着一枚橙色的『虚空种子』核心，发出不祥的低鸣。",
+      tiles: [
+        "#############",
+        "#.....V.....#",
+        "#...........#",
+        "#..P........#",
+        "#........E..#",
+        "#############"
+      ]
+    }
+  };
+
+  const NPC_SYMBOL = {
+    "C": "列", // 列车长
+    "K": "工", // 工程师
+    "L": "研", // 观测员
+    "G": "卫", // 治安官
+    "V": "核", // 核心
+    "E": "门"  // 出口
+  };
+
+  // ------------ 状态变量 ------------
+  let currentArea = AREAS.train;
+  let mapGrid = [];
+  let mapWidth = 0;
+  let mapHeight = 0;
+  let playerX = 0;
+  let playerY = 0;
+
+  const flags = {
+    metConductor: false,
+    talkedEngineer: false,
+    metScientist: false,
+    metGuard: false,
+    choiceProtectPeople: null, // true 保护居民，false 立即行动
+    decisionPurify: null,      // true 净化，false 摧毁
+    coreResolved: false
+  };
+
+  // ------------ DOM ------------
+  const storyBox = document.getElementById("storyBox");
+  const goalBox = document.getElementById("goalBox");
+  const mapEl = document.getElementById("map");
+
+  function setStory(text) {
+    storyBox.textContent = text;
+  }
+
+  function appendStory(text) {
+    storyBox.textContent = text;
+  }
+
+  function setGoal(text) {
+    goalBox.textContent = "当前目标： " + text;
+  }
+
+  function cloneTiles(area) {
+    return area.tiles.map(row => row.split(""));
+  }
+
+  function findStartPosition(grid) {
+    for (let y = 0; y < grid.length; y++) {
+      for (let x = 0; x < grid[y].length; x++) {
+        if (grid[y][x] === "P") {
+          return { x, y };
+        }
+      }
+    }
+    return {
+      x: Math.floor(grid[0].length / 2),
+      y: Math.floor(grid.length / 2)
+    };
+  }
+
+  function loadArea(areaKey) {
+    currentArea = AREAS[areaKey];
+    mapGrid = cloneTiles(currentArea);
+    mapHeight = mapGrid.length;
+    mapWidth = mapGrid[0].length;
+
+    const start = findStartPosition(mapGrid);
+    playerX = start.x;
+    playerY = start.y;
+
+    if (mapGrid[playerY][playerX] === "P") {
+      mapGrid[playerY][playerX] = ".";
+    }
+
+    renderMap();
+    setStory(currentArea.intro);
+    updateGoalAfterAreaChange();
+  }
+
+  function renderMap() {
+    mapEl.innerHTML = "";
+    mapEl.style.gridTemplateColumns = `repeat(${mapWidth}, 1fr)`;
+
+    for (let y = 0; y < mapHeight; y++) {
+      for (let x = 0; x < mapWidth; x++) {
+        let ch = mapGrid[y][x];
+        if (ch === "P") ch = ".";
+        const tile = document.createElement("div");
+        tile.classList.add("tile");
+        tile.dataset.x = x;
+        tile.dataset.y = y;
+
+        if (ch === "#") {
+          tile.classList.add("wall");
+        } else {
+          tile.classList.add("floor");
+        }
+
+        if ("CKLG".includes(ch)) {
+          tile.classList.add("npc");
+        }
+        if (ch === "E") {
+          tile.classList.add("exit");
+        }
+        if (ch === "V") {
+          tile.classList.add("core");
+        }
+
+        const span = document.createElement("span");
+        span.textContent = NPC_SYMBOL[ch] || "";
+        tile.appendChild(span);
+        mapEl.appendChild(tile);
+      }
+    }
+    highlightPlayer();
+  }
+
+  function highlightPlayer() {
+    const tiles = mapEl.querySelectorAll(".tile");
+    tiles.forEach(t => t.classList.remove("player"));
+    const selector = `.tile[data-x="${playerX}"][data-y="${playerY}"]`;
+    const playerTile = mapEl.querySelector(selector);
+    if (playerTile) {
+      playerTile.classList.add("player");
+    }
+  }
+
+  function isWalkable(x, y) {
+    if (x < 0 || x >= mapWidth || y < 0 || y >= mapHeight) return false;
+    const ch = mapGrid[y][x];
+    if (ch === "#") return false;
+    return true;
+  }
+
+  // ------------ 移动与交互 ------------
+  function movePlayer(dx, dy) {
+    const nx = playerX + dx;
+    const ny = playerY + dy;
+    if (!isWalkable(nx, ny)) return;
+    playerX = nx;
+    playerY = ny;
+    highlightPlayer();
+
+    const ch = mapGrid[ny][nx];
+    if (ch === "E") {
+      handleExit();
+    }
+  }
+
+  function handleExit() {
+    if (currentArea.key === "train") {
+      if (!flags.talkedEngineer) {
+        appendStory("凯的声音从终端传来：『等一下，我还在校准跳跃轨道，再等等。』");
+        return;
+      }
+      appendStory("列车减速，你被能量光束笼罩，视野转为一片黄沙。");
+      setGoal("在前哨站中寻找观测员琳娜。");
+      loadArea("outpost");
+    } else if (currentArea.key === "outpost") {
+      if (!flags.metScientist) {
+        appendStory("布洛克拦住了你：『琳娜还没给出计划，盲目出站会被风暴撕碎。』");
+        return;
+      }
+      appendStory("你穿过前哨的气闸，顺着地底通道来到遗迹深处。");
+      setGoal("在遗迹深处找到『虚空种子』核心。");
+      loadArea("ruins");
+    } else if (currentArea.key === "ruins") {
+      if (!flags.coreResolved) {
+        appendStory("你还没解决虚空核心，现在离开只会让一切功亏一篑。");
+        return;
+      }
+      appendStory("你顺着通道返回极光快车。列车重新启动，星轨在你脚下延伸。");
+      showEnding();
+      loadArea("train");
+    }
+  }
+
+  function updateGoalAfterAreaChange() {
+    if (currentArea.key === "train" && !flags.metConductor) {
+      setGoal("靠近列车长伊玛（列）并按 ⚡ 交谈。");
+    } else if (currentArea.key === "train") {
+      setGoal("和车上的同伴聊聊，等待下一次出发。任务已完成。");
+    } else if (currentArea.key === "outpost" && !flags.metScientist) {
+      setGoal("在前哨站中寻找观测员琳娜（研）。");
+    } else if (currentArea.key === "ruins" && !flags.coreResolved) {
+      setGoal("靠近虚空核心（核），按 ⚡ 做出最终选择。");
+    }
+  }
+
+  function findInteractableAroundPlayer() {
+    const offsets = [
+      [0, 0],
+      [0, -1],
+      [0, 1],
+      [-1, 0],
+      [1, 0]
+    ];
+    for (const [dx, dy] of offsets) {
+      const x = playerX + dx;
+      const y = playerY + dy;
+      if (x < 0 || x >= mapWidth || y < 0 || y >= mapHeight) continue;
+      const ch = mapGrid[y][x];
+      if ("CKLGVE".includes(ch)) {
+        return { x, y, ch };
+      }
+    }
+    return null;
+  }
+
+  function doAction() {
+    const target = findInteractableAroundPlayer();
+    if (!target) {
+      appendStory("你环顾四周，只有列车的嗡鸣与远处的星光。");
+      return;
+    }
+    const ch = target.ch;
+    if (ch === "C")      talkConductor();
+    else if (ch === "K") talkEngineer();
+    else if (ch === "L") talkScientist();
+    else if (ch === "G") talkGuard();
+    else if (ch === "V") talkCore();
+    else if (ch === "E") handleExit();
+  }
+
+  // ------------ 剧情：列车 ------------
+  function talkConductor() {
+    if (!flags.metConductor) {
+      flags.metConductor = true;
+      setStory(
+        "伊玛（微笑着打量你）：『欢迎登上极光快车，旅客。我们在星轨上捡到你时，你怀里抱着一枚失控的虚空碎片。』\n\n" +
+        "『那东西现在掉到了下方的行星“卡尔墨斯”，并开始侵蚀星轨。如果不处理，这一段轨道会断成碎片。』"
+      );
+      setGoal("去找工程师凯（工），了解虚空碎片对列车的影响。");
+    } else if (!flags.talkedEngineer) {
+      setStory("伊玛：『先去听听凯的计划吧，他已经为这次降轨准备了一整夜。别担心，你不会一个人面对虚空。』");
+    } else if (!flags.coreResolved) {
+      setStory("伊玛：『卡尔墨斯那边的情况随时可能恶化。准备好后，就从车厢右侧的门离开。极光会把你送到前哨站。』");
+    } else {
+      if (flags.decisionPurify) {
+        setStory("伊玛：『你选择了净化虚空，而不是直接毁灭它。卡尔墨斯的天空又亮了一些，但新的星轨观测数据……也许宇宙会记住你的温柔。』");
+      } else {
+        setStory("伊玛：『你选择了毁灭核心，星轨变得更加稳定，而卡尔墨斯失去了一片大陆。宇宙不会评价你的选择——但我们会记住。』");
+      }
+    }
+  }
+
+  function talkEngineer() {
+    if (!flags.metConductor) {
+      setStory("凯正忙着敲击控制台：『先去找列车长吧，她更擅长和刚醒来的旅客聊天。』");
+      return;
+    }
+    if (!flags.talkedEngineer) {
+      flags.talkedEngineer = true;
+      setStory(
+        "凯（揉着太阳穴）：『虚空碎片污染了我们的燃料，我们必须下去解决核心，不然这段星轨会被撕成漩涡。』\n\n" +
+        "『我已经把列车的跳跃点锁定在卡尔墨斯的沙漠前哨站。等我完成校准，你就从右侧的门离开。』"
+      );
+      setGoal("等待凯完成校准后，从车厢右侧的门（门）前往卡尔墨斯前哨站。");
+    } else if (!flags.coreResolved) {
+      setStory("凯：『我已经在你的终端里塞了一些应急程序，别太靠近核心的外围裂缝——那玩意儿会把时间拉长到让人发疯。』");
+    } else {
+      setStory("凯松了一口气：『列车的读数恢复正常了。无论你在那边做了什么，都救回了一条星轨。』");
+    }
+  }
+
+  // ------------ 剧情：前哨站 ------------
+  function talkScientist() {
+    if (!flags.metScientist) {
+      flags.metScientist = true;
+      const choiceProtect = window.confirm(
+        "琳娜：『虚空核心在遗迹深处，我们有两个选择——\n\n" +
+        "【确定】先保护前哨站居民，再缓慢封锁核心；\n" +
+        "【取消】立即突入遗迹，直接隔离核心。』\n\n" +
+        "你要优先保护居民吗？"
+      );
+      flags.choiceProtectPeople = choiceProtect;
+
+      if (choiceProtect) {
+        setStory("琳娜郑重地点头：『好，我会启动疏散程序，把能送走的人都送上逃生舱。你负责从地下通道突入遗迹，拖住核心的扩张。』");
+      } else {
+        setStory("琳娜沉默片刻：『……明白了。我们没有太多时间，前哨站的人会记得你的果断。你直接走地下通道，核心就在遗迹最深处。』");
+      }
+      setGoal("从前哨站右上角的门（门）进入遗迹深处。");
+    } else if (!flags.coreResolved) {
+      if (flags.choiceProtectPeople) {
+        setStory("琳娜：『疏散船已经起飞了一半，剩下的就看你能否拖住核心。别被那些虚空触须缠住。』");
+      } else {
+        setStory("琳娜：『风暴正在加速，我们已经错过了“安全”的选择。你走在最危险的那条线上，小心别被核心吞进去。』");
+      }
+    } else {
+      setStory("琳娜望着逐渐平静的仪表：『虚空信号在消退了。也许有一天，极光快车还会再次路过这里，那时卡尔墨斯会是另一幅模样。』");
+    }
+  }
+
+  function talkGuard() {
+    flags.metGuard = true;
+    if (!flags.metScientist) {
+      setStory("布洛克靠在墙边警惕地打量你：『外面是把人骨头都打碎的沙暴，先去找琳娜听任务简报，她在控制室。』");
+    } else if (!flags.coreResolved) {
+      setStory("布洛克把手放在胸前：『无论你择哪条路，前哨站的人都会在记录里给你立一块牌。现在——去把那团灾难捶一顿。』");
+    } else {
+      setStory("布洛克看向窗外宁静下来的沙海：『等风暴完全平息，我想在这里建一座纪念轨塔，把你的名字刻上去。』");
+    }
+  }
+
+  // ------------ 剧情：核心 ------------
+  function talkCore() {
+    if (currentArea.key !== "ruins") return;
+
+    if (!flags.coreResolved) {
+      const textChoice = window.confirm(
+        "你走近『虚空种子』核心，耳边响起仿佛来自星轨另一端的低语。\n\n" +
+        "【确定】尝试用极光快车的星轨能量净化核心，保住行星但风险更高；\n" +
+        "【取消】启动过载装置，彻底摧毁核心，换取轨道的绝对稳定。\n\n" +
+        "你的选择是？"
+      );
+      flags.decisionPurify = textChoice;
+      flags.coreResolved = true;
+
+      if (textChoice) {
+        setStory(
+          "你将极光快车的星轨能量导入核心，像剥离一层层旧皮那样剥开虚空污染。" +
+          "核心的光由炽烈转为温和，沙暴渐渐停歇。\n\n" +
+          "远处的天空重新露出星轨的轮廓——有些扭曲，却活着。"
+        );
+      } else {
+        setStory(
+          "你在核心周围布满过载装置，按下启动键的瞬间，耀眼的白光吞没了整片遗迹。" +
+          "虚空核心与一切被它污染的物质一并化为星尘。\n\n" +
+          "星轨的读数恢复平稳，而卡尔墨斯失去了大片大陆与记忆。"
+        );
+      }
+      setGoal("寻找出口（门），返回极光快车，听取同伴的评价。");
+    } else {
+      setStory("虚空核心已被你改变。无论结果如何，这片遗迹已经成为星轨上的一个故事节点。");
+    }
+  }
+
+  // ------------ 结局 ------------
+  function showEnding() {
+    let line1, line2;
+    if (flags.decisionPurify) {
+      line1 = "极光快车在星轨上划出一道温柔的弧线，车窗外的卡尔墨斯仍在，带着新的伤疤与新的未来。";
+      line2 = flags.choiceProtectPeople
+        ? "你既选择了保护居民，又冒险净化核心。伊玛在列车日志中写下：『在今天，星轨学会了“妥协”这个词。』"
+        : "你放弃了前哨站的完美疏散，却保住了一颗星球。宇宙从不奖赏正确，只会记住发生过的选择。";
+    } else {
+      line1 = "极光快车静静驶离爆炸后的尘埃云。星轨稳定得前所未有，却也空出了一段永远不会再响起呼吸声的轨道。";
+      line2 = flags.choiceProtectPeople
+        ? "你先护住了居民，再以毁灭收尾。有人说那是最温柔的残酷，也有人说那只是必要的算术。"
+        : "从始至终，你都站在最冷静的那一边。伊玛没有评价，只是把你的名字写在了列车的黑匣子里。";
+    }
+    setTimeout(() => {
+      setStory(
+        line1 + "\n\n" + line2 +
+        "\n\n—— 任务结束，你可以继续在车厢里走动，与同伴交谈，回味这段旅程。刷新页面可重新体验另一种选择。"
+      );
+      setGoal("任务结束。你可以随意探索，或刷新页面重新选择命运。");
+    }, 200);
+  }
+
+  // ------------ 输入绑定 ------------
+  function handleControl(btn) {
+    if      (btn === "up")    movePlayer(0, -1);
+    else if (btn === "down")  movePlayer(0,  1);
+    else if (btn === "left")  movePlayer(-1, 0);
+    else if (btn === "right") movePlayer(1,  0);
+    else if (btn === "action") doAction();
+  }
+
+  document.querySelectorAll("#controls button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const type = btn.getAttribute("data-btn");
+      handleControl(type);
+    });
+  });
+
+  document.addEventListener("keydown", (e) => {
+    const key = e.key;
+    if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," ","Enter",
+         "w","a","s","d","W","A","S","D"].includes(key)) {
+      e.preventDefault();
+    } else {
+      return;
+    }
+
+    if (key === "ArrowUp" || key === "w" || key === "W")       handleControl("up");
+    else if (key === "ArrowDown" || key === "s" || key === "S") handleControl("down");
+    else if (key === "ArrowLeft" || key === "a" || key === "A") handleControl("left");
+    else if (key === "ArrowRight" || key === "d" || key === "D")handleControl("right");
+    else if (key === " " || key === "Enter")                   handleControl("action");
+  });
+
+  // ------------ 初始化 ------------
+  loadArea("train");
+  setStory("你在极光快车的车厢中醒来，耳边只有引擎的低鸣。一个戴着执事帽的身影——列车长伊玛——正朝你挥手。试着靠近她并按 ⚡ 交谈。");
+</script>
+</body>
+</html>
