@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>星穹微铁道：黑塔危机 (虚拟键盘版)</title>
+    <style>
+        :root {
+            --bg-color: #1a1a2e;
+            --ui-bg: rgba(16, 24, 48, 0.95);
+            --accent: #e94560;
+            --accent-light: #ff6b81;
+            --text: #fff;
+            --btn-base: #2d3748;
+            --btn-shadow: #1a202c;
+            --gold: #ecc94b;
+            --ice: #4fd1c5;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            color: var(--text);
+            font-family: system-ui, -apple-system, sans-serif;
+            overflow: hidden; /* 禁止滚动 */
+            touch-action: none; /* 禁止默认触摸行为 */
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            align-items: center;
+            justify-content: center;
+            user-select: none; /* 禁止选中文本 */
+            -webkit-user-select: none;
+        }
+
+        #game-wrapper {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            max-width: 600px;
+            max-height: 900px;
+            background: var(--bg-color);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 游戏画面区域 */
+        #canvas-container {
+            flex: 1; /* 占据剩余空间 */
+            position: relative;
+            width: 100%;
+            background: #000;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated;
+        }
+
+        /* === 虚拟键盘区域 (新) === */
+        #virtual-controller {
+            height: 220px;
+            background: linear-gradient(to bottom, #232526, #414345);
+            border-top: 2px solid #555;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 40px;
+            box-sizing: border-box;
+            position: relative;
+            z-index: 100;
+            box-shadow: 0 -5px 20px rgba(0,0,0,0.5);
+        }
+        
+        /* 十字键区域 */
+        .dpad-container {
+            width: 140px;
+            height: 140px;
+            position: relative;
+        }
+
+        .dpad-btn {
+            position: absolute;
+            width: 45px;
+            height: 45px;
+            background: #333;
+            border: 1px solid #555;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #aaa;
+            font-size: 20px;
+            box-shadow: 0 4px 0 var(--btn-shadow);
+            transition: transform 0.1s, box-shadow 0.1s;
+            cursor: pointer;
+        }
+
+        .dpad-btn:active, .dpad-btn.active {
+            transform: translateY(4px);
+            box-shadow: 0 0 0 var(--btn-shadow);
+            background: #444;
+            color: var(--gold);
+        }
+
+        .btn-up { top: 0; left: 47.5px; border-radius: 5px 5px 0 0; }
+        .btn-down { bottom: 0; left: 47.5px; border-radius: 0 0 5px 5px; }
+        .btn-left { top: 47.5px; left: 0; border-radius: 5px 0 0 5px; }
+        .btn-right { top: 47.5px; right: 0; border-radius: 0 5px 5px 0; }
+        
+        /* 中心装饰 */
+        .dpad-center {
+            position: absolute;
+            top: 47.5px; left: 47.5px;
+            width: 45px; height: 45px;
+            background: #222;
+        }
+
+        /* 功能键区域 */
+        .action-container {
+            width: 120px;
+            height: 140px;
+            position: relative;
+        }
+
+        .action-btn {
+            position: absolute;
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 24px;
+            color: white;
+            box-shadow: 0 5px 0 rgba(0,0,0,0.4);
+            transition: transform 0.1s, box-shadow 0.1s;
+            cursor: pointer;
+        }
+
+        .action-btn:active, .action-btn.active {
+            transform: translateY(5px) scale(0.95);
+            box-shadow: 0 0 0 rgba(0,0,0,0.4);
+        }
+
+        #btn-a {
+            bottom: 10px; right: 0;
+            background: var(--accent);
+            border: 2px solid #fff;
+        }
+        
+        /* 装饰性文字 */
+        .ctrl-label {
+            position: absolute;
+            color: #666;
+            font-size: 10px;
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+
+        /* === UI 覆盖层 === */
+        .ui-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        /* 对话框 */
+        #dialogue-box {
+            display: none;
+            position: absolute;
+            bottom: 20px; left: 5%; width: 90%;
+            background: var(--ui-bg);
+            border: 1px solid var(--gold);
+            padding: 15px;
+            border-radius: 4px;
+            pointer-events: auto;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+        }
+
+        /* 战斗界面 */
+        #combat-ui {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            pointer-events: auto;
+            flex-direction: column;
+            justify-content: space-between;
+            padding-bottom: 20px;
+            z-index: 50;
+        }
+
+        /* 战斗按钮重写，使其更大更易点 */
+        .combat-actions {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            padding: 20px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .c-btn {
+            background: rgba(255,255,255,0.1);
+            border: 2px solid #aaa;
+            color: #fff;
+            width: 80px; height: 80px;
+            border-radius: 50%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            backdrop-filter: blur(5px);
+        }
+        .c-btn span { font-size: 10px; color: #ccc; margin-top: 2px; }
+        .c-btn.active-skill { border-color: var(--ice); background: rgba(79, 209, 197, 0.2); }
+        .c-btn.ult { border-color: var(--gold); color: var(--gold); box-shadow: 0 0 15px var(--gold); animation: pulse 2s infinite; }
+        .c-btn:active { transform: scale(0.9); }
+        .c-btn.disabled { opacity: 0.3; filter: grayscale(1); pointer-events: none; }
+
+        /* 状态条 */
+        .bar-container { width: 100%; height: 8px; background: #333; border-radius: 4px; overflow: hidden; margin: 5px 0; }
+        .hp-bar { background: #48bb78; height: 100%; width: 100%; transition: width 0.3s; }
+        .shield-bar { background: #fff; height: 100%; width: 100%; transition: width 0.3s; }
+        
+        @keyframes pulse { 0% { box-shadow: 0 0 5px var(--gold); } 50% { box-shadow: 0 0 20px var(--gold); } 100% { box-shadow: 0 0 5px var(--gold); } }
+        @keyframes floatUp { 0% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(-40px); opacity: 0; } }
+        
+        .dmg-num {
+            position: absolute;
+            color: #ffeb3b; font-weight: 900; font-size: 28px;
+            text-shadow: 2px 2px 0 #000;
+            animation: floatUp 0.8s forwards;
+            pointer-events: none;
+            z-index: 60;
+        }
+
+        /* 开始屏幕 */
+        #start-screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(10, 10, 20, 0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+            text-align: center;
+        }
+        .start-btn {
+            padding: 15px 50px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 30px;
+            font-size: 20px;
+            margin-top: 30px;
+            box-shadow: 0 0 20px var(--accent);
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-wrapper">
+    <div id="canvas-container">
+        <canvas id="gameCanvas"></canvas>
+        
+        <!-- 漫游 UI -->
+        <div class="ui-layer" id="roam-ui">
+            <div style="display:flex; justify-content:space-between;">
+                <div style="background:rgba(0,0,0,0.5); padding:5px 10px; border-radius:15px; font-size:12px; border:1px solid #555;">
+                    📍 黑塔空间站 · 收容舱段
+                </div>
+            </div>
+        </div>
+
+        <!-- 对话框 -->
+        <div id="dialogue-box">
+            <div id="speaker-name" style="color: var(--gold); font-weight:bold; margin-bottom:5px;">名字</div>
+            <div id="dialogue-text" style="line-height:1.5;">内容...</div>
+            <div style="text-align:right; font-size:12px; color:#888; margin-top:5px;">▼ 点击 A 键</div>
+        </div>
+
+        <!-- 战斗 UI -->
+        <div id="combat-ui">
+            <!-- 敌人信息 -->
+            <div style="padding: 40px 20px; text-align: center;">
+                <h2 id="enemy-name" style="margin:0 0 10px 0; text-shadow:0 0 10px #000;">敌人名称</h2>
+                <div style="width: 60%; margin: 0 auto;">
+                    <div class="bar-container"><div id="enemy-hp" class="hp-bar"></div></div>
+                    <div class="bar-container" style="height: 6px; width: 80%; margin: 2px auto;"><div id="enemy-shield" class="shield-bar"></div></div>
+                    <div style="font-size:12px; color:#ccc;">弱点: 物理 / 冰</div>
+                </div>
+            </div>
+
+            <!-- 战斗信息反馈区 -->
+            <div id="combat-msg" style="text-align:center; font-size:18px; font-weight:bold; height: 30px; color:#fff;"></div>
+
+            <!-- 玩家操作区 -->
+            <div style="background: linear-gradient(to top, rgba(0,0,0,0.9), transparent); padding-bottom: 20px;">
+                <div style="padding: 0 20px; display:flex; justify-content:space-between; align-items:flex-end;">
+                    <div>
+                        <div style="font-size:16px; font-weight:bold;">开拓者</div>
+                        <div style="width: 120px;">
+                            <div class="bar-container"><div id="player-hp" class="hp-bar"></div></div>
+                        </div>
+                        <div style="color:var(--ice); font-weight:bold; margin-top:5px;">SP: <span id="sp-val">3</span>/5</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:12px; color:var(--gold);">终结技能量</div>
+                        <div class="bar-container" style="width:100px; background:#444;"><div id="player-energy" class="hp-bar" style="background:var(--gold); width:0%;"></div></div>
+                    </div>
+                </div>
+
+                <div class="combat-actions">
+                    <div class="c-btn" onclick="game.combatAction('attack')">普攻<span>+1 SP</span></div>
+                    <div class="c-btn" id="btn-skill" onclick="game.combatAction('skill')">战技<span>-1 SP</span></div>
+                    <div class="c-btn ult" id="btn-ult" onclick="game.combatAction('ult')">终结技<span>READY</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 虚拟控制器 -->
+    <div id="virtual-controller">
+        <div class="ctrl-label" style="top: 10px; left: 40px;">MOVEMENT</div>
+        <div class="dpad-container">
+            <div class="dpad-center"></div>
+            <div class="dpad-btn btn-up" data-key="ArrowUp">▲</div>
+            <div class="dpad-btn btn-left" data-key="ArrowLeft">◀</div>
+            <div class="dpad-btn btn-right" data-key="ArrowRight">▶</div>
+            <div class="dpad-btn btn-down" data-key="ArrowDown">▼</div>
+        </div>
+
+        <div class="ctrl-label" style="top: 10px; right: 40px;">ACTION</div>
+        <div class="action-container">
+            <div class="action-btn" id="btn-a" data-key="Enter">A</div>
+        </div>
+    </div>
+
+    <!-- 开始界面 -->
+    <div id="start-screen">
+        <h1 style="color: var(--accent); font-size: 32px; margin-bottom: 10px;">崩坏：星穹微铁道</h1>
+        <div style="color: #aaa; margin-bottom: 20px;">HTML5 单文件重制版</div>
+        <div style="font-size: 14px; line-height: 1.6; color: #ccc;">
+            目标：前往主控舱段<br>
+            操作：使用下方虚拟键盘移动与交互<br>
+            (支持键盘方向键 + 回车)
+        </div>
+        <button class="start-btn" onclick="game.start()">登录游戏</button>
+    </div>
+</div>
+
+<script>
+/**
+ * 简单的游戏引擎与逻辑
+ */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// 适配高分屏和容器大小
+function resizeCanvas() {
+    const container = document.getElementById('canvas-container');
+    canvas.width = container.clientWidth;
+    canvas.height = container.clientHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// 常量
+const TILE_SIZE = 40;
+const PALETTE = {
+    WALL: '#2d3748',
+    FLOOR: '#171923',
+    PLAYER: '#e2e8f0',
+    ENEMY: '#e53e3e',
+    CHEST: '#ecc94b',
+    NPC: '#4fd1c5'
+};
+
+// 地图数据 (1=墙, 0=地, 2=怪, 3=箱, 4=NPC)
+const MAP = [
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,0,0,0,1,3,0,0,0,0,0,0,0,0,1],
+    [1,0,2,0,1,1,1,1,1,1,0,1,1,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,1,1,0,1,1,1,0,0,1,1,1,1,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,1,1,1,0,0,2,0,0,1,1,1,0,1], // 2 is Mini Boss area
+    [1,0,1,0,1,0,0,0,0,0,1,0,0,0,1],
+    [1,0,1,0,1,1,1,0,1,1,1,0,1,1,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,1,1,1,0,1,1,1,1,1,0,1,1,1,1],
+    [1,0,0,0,0,0,0,4,0,0,0,0,0,0,1], // 4 Start
+    [1,0,2,0,0,0,0,0,0,0,0,0,3,0,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+];
+
+class Game {
+    constructor() {
+        this.state = 'START'; // START, ROAM, DIALOGUE, COMBAT
+        this.player = { x: 7, y: 11, hp: 1000, maxHp: 1000, sp: 3, energy: 0, atk: 100 };
+        this.enemies = [];
+        this.chests = [];
+        this.npcs = [];
+        this.inputDir = null;
+        this.lastMoveTime = 0;
+        this.moveInterval = 150; // 移动速度
+        
+        this.initMapEntities();
+        this.setupControls();
+        
+        this.loop = this.loop.bind(this);
+        requestAnimationFrame(this.loop);
+    }
+
+    initMapEntities() {
+        // 解析地图生成实体
+        for(let y=0; y<MAP.length; y++) {
+            for(let x=0; x<MAP[0].length; x++) {
+                const val = MAP[y][x];
+                if(val === 2) this.enemies.push({x, y, id: Math.random(), hp: 500, maxHp: 500, shield: 100, maxShield: 100, name: "反物质军团", alive: true});
+                if(val === 3) this.chests.push({x, y, opened: false});
+                if(val === 4) this.npcs.push({x, y, name: "三月七"});
+            }
+        }
+    }
+
+    start() {
+        document.getElementById('start-screen').style.display = 'none';
+        this.state = 'ROAM';
+        this.showDialogue("三月七", ["开拓者，你终于醒了！", "这里是黑塔空间站的收容舱段。", "反物质军团入侵了，我们得小心。", "用你的球棒教训它们！"]);
+    }
+
+    // === 核心控制逻辑 ===
+    setupControls() {
+        const btns = document.querySelectorAll('.dpad-btn, .action-btn');
+        
+        // 触摸/鼠标事件处理
+        btns.forEach(btn => {
+            const handleStart = (e) => {
+                e.preventDefault();
+                const key = btn.dataset.key;
+                btn.classList.add('active');
+                this.handleInput(key, true);
+            };
+            const handleEnd = (e) => {
+                e.preventDefault();
+                const key = btn.dataset.key;
+                btn.classList.remove('active');
+                this.handleInput(key, false);
+            };
+
+            btn.addEventListener('mousedown', handleStart);
+            btn.addEventListener('touchstart', handleStart);
+            btn.addEventListener('mouseup', handleEnd);
+            btn.addEventListener('touchend', handleEnd);
+            btn.addEventListener('mouseleave', handleEnd);
+        });
+
+        // 键盘事件映射到虚拟按键视觉
+        window.addEventListener('keydown', (e) => {
+            const btn = document.querySelector(`[data-key="${e.key}"]`) || document.querySelector(`[data-key="${e.code}"]`);
+            if(btn) btn.classList.add('active');
+            this.handleInput(e.key, true);
+            if(e.key === 'Enter') this.handleInput('Enter', true); // Map Enter to A
+        });
+
+        window.addEventListener('keyup', (e) => {
+            const btn = document.querySelector(`[data-key="${e.key}"]`) || document.querySelector(`[data-key="${e.code}"]`);
+            if(btn) btn.classList.remove('active');
+            this.handleInput(e.key, false);
+        });
+    }
+
+    handleInput(key, isPressed) {
+        if (!isPressed) {
+            if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(key)) {
+                if (this.inputDir === key) this.inputDir = null;
+            }
+            return;
+        }
+
+        if (this.state === 'ROAM') {
+            if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(key)) {
+                this.inputDir = key;
+            }
+            if (key === 'Enter') this.interact();
+        } else if (this.state === 'DIALOGUE') {
+            if (key === 'Enter') this.nextDialogue();
+        }
+    }
+
+    interact() {
+        // 检查周围
+        const dirs = [[0,0], [0,-1], [0,1], [-1,0], [1,0]];
+        for(let d of dirs) {
+            const tx = this.player.x + d[0];
+            const ty = this.player.y + d[1];
+            
+            // 宝箱
+            const chest = this.chests.find(c => c.x === tx && c.y === ty && !c.opened);
+            if(chest) {
+                chest.opened = true;
+                this.showDialogue("系统", ["开启战利品！", "获得：星琼 x 10", "获得：冒险记录 x 2"]);
+                return;
+            }
+            // NPC
+            const npc = this.npcs.find(n => n.x === tx && n.y === ty);
+            if(npc) {
+                this.showDialogue(npc.name, ["这里的怪物好像有物理弱点。", "使用战技可以快速击破它们的韧性！", "加油啊，开拓者！"]);
+                return;
+            }
+        }
+    }
+
+    update() {
+        if (this.state === 'ROAM' && this.inputDir) {
+            const now = Date.now();
+            if (now - this.lastMoveTime > this.moveInterval) {
+                let dx = 0, dy = 0;
+                if (this.inputDir === 'ArrowUp') dy = -1;
+                if (this.inputDir === 'ArrowDown') dy = 1;
+                if (this.inputDir === 'ArrowLeft') dx = -1;
+                if (this.inputDir === 'ArrowRight') dx = 1;
+
+                const nx = this.player.x + dx;
+                const ny = this.player.y + dy;
+
+                // 碰撞检测
+                if (ny >= 0 && ny < MAP.length && nx >= 0 && nx < MAP[0].length) {
+                    const tile = MAP[ny][nx];
+                    // 撞墙
+                    if (tile === 1) return;
+                    
+                    // 撞怪
+                    const enemy = this.enemies.find(e => e.x === nx && e.y === ny && e.alive);
+                    if (enemy) {
+                        this.startCombat(enemy);
+                        return;
+                    }
+                    
+                    // 移动
+                    this.player.x = nx;
+                    this.player.y = ny;
+                    this.lastMoveTime = now;
+                }
+            }
+        }
+    }
+
+    // === 渲染逻辑 ===
+    draw() {
+        if (this.state === 'COMBAT') return; // 战斗时canvas不渲染地图，节省资源
+
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // 计算摄像机偏移 (保持玩家居中)
+        const scale = 45; // 放大一点
+        const offsetX = canvas.width/2 - this.player.x * scale - scale/2;
+        const offsetY = canvas.height/2 - this.player.y * scale - scale/2;
+
+        ctx.save();
+        ctx.translate(offsetX, offsetY);
+
+        // 绘制地图
+        for(let y=0; y<MAP.length; y++) {
+            for(let x=0; x<MAP[0].length; x++) {
+                const tile = MAP[y][x];
+                if(tile === 1) {
+                    // 墙体 3D 效果
+                    ctx.fillStyle = '#1a202c';
+                    ctx.fillRect(x*scale, y*scale, scale, scale);
+                    ctx.fillStyle = '#2d3748';
+                    ctx.fillRect(x*scale, y*scale, scale, scale-5);
+                } else {
+                    ctx.fillStyle = PALETTE.FLOOR;
+                    ctx.fillRect(x*scale, y*scale, scale, scale);
+                    ctx.strokeStyle = '#222';
+                    ctx.strokeRect(x*scale, y*scale, scale, scale);
+                }
+            }
+        }
+
+        // 绘制物体
+        this.chests.forEach(c => {
+            if(!c.opened) {
+                ctx.fillStyle = PALETTE.CHEST;
+                ctx.fillRect(c.x*scale + 10, c.y*scale + 10, scale-20, scale-20);
+            }
+        });
+
+        this.enemies.forEach(e => {
+            if(e.alive) {
+                ctx.fillStyle = PALETTE.ENEMY;
+                ctx.beginPath();
+                ctx.moveTo(e.x*scale + scale/2, e.y*scale + 5);
+                ctx.lineTo(e.x*scale + scale - 5, e.y*scale + scale/2);
+                ctx.lineTo(e.x*scale + scale/2, e.y*scale + scale - 5);
+                ctx.lineTo(e.x*scale + 5, e.y*scale + scale/2);
+                ctx.fill();
+            }
+        });
+
+        this.npcs.forEach(n => {
+            ctx.fillStyle = PALETTE.NPC;
+            ctx.beginPath();
+            ctx.arc(n.x*scale + scale/2, n.y*scale + scale/2, scale/3, 0, Math.PI*2);
+            ctx.fill();
+        });
+
+        // 绘制玩家
+        ctx.fillStyle = PALETTE.PLAYER;
+        ctx.beginPath();
+        ctx.arc(this.player.x*scale + scale/2, this.player.y*scale + scale/2, scale/2.5, 0, Math.PI*2);
+        ctx.fill();
+        // 玩家朝向指示
+        ctx.fillStyle = '#ecc94b';
+        ctx.beginPath();
+        ctx.arc(this.player.x*scale + scale/2 + 5, this.player.y*scale + scale/2 - 5, 5, 0, Math.PI*2);
+        ctx.fill();
+
+        ctx.restore();
+    }
+
+    // === 对话系统 ===
+    showDialogue(name, texts) {
+        this.state = 'DIALOGUE';
+        this.dialogueQueue = texts.map(t => ({name, text: t}));
+        this.updateDialogueUI();
+        document.getElementById('dialogue-box').style.display = 'block';
+        document.getElementById('virtual-controller').style.opacity = '0.5'; // 变暗
+    }
+
+    nextDialogue() {
+        this.dialogueQueue.shift();
+        if(this.dialogueQueue.length === 0) {
+            document.getElementById('dialogue-box').style.display = 'none';
+            document.getElementById('virtual-controller').style.opacity = '1';
+            this.state = 'ROAM';
+        } else {
+            this.updateDialogueUI();
+        }
+    }
+
+    updateDialogueUI() {
+        if(this.dialogueQueue.length > 0) {
+            const d = this.dialogueQueue[0];
+            document.getElementById('speaker-name').innerText = d.name;
+            document.getElementById('dialogue-text').innerText = d.text;
+        }
+    }
+
+    // === 战斗系统 ===
+    startCombat(enemy) {
+        this.state = 'COMBAT';
+        this.currentEnemy = enemy;
+        document.getElementById('combat-ui').style.display = 'flex';
+        document.getElementById('roam-ui').style.display = 'none';
+        document.getElementById('virtual-controller').style.display = 'none'; // 隐藏手柄
+        
+        document.getElementById('enemy-name').innerText = enemy.name;
+        this.updateCombatUI();
+        this.logCombat("遭遇强敌！");
+    }
+
+    updateCombatUI() {
+        if(!this.currentEnemy) return;
+        
+        const e = this.currentEnemy;
+        const p = this.player;
+
+        document.getElementById('enemy-hp').style.width = (e.hp / e.maxHp * 100) + '%';
+        document.getElementById('enemy-shield').style.width = (e.shield / e.maxShield * 100) + '%';
+        document.getElementById('player-hp').style.width = (p.hp / p.maxHp * 100) + '%';
+        document.getElementById('player-energy').style.width = (p.energy / 100 * 100) + '%';
+        document.getElementById('sp-val').innerText = p.sp;
+
+        // 按钮状态
+        const skillBtn = document.getElementById('btn-skill');
+        if(p.sp < 1) skillBtn.classList.add('disabled'); else skillBtn.classList.remove('disabled');
+        
+        const ultBtn = document.getElementById('btn-ult');
+        if(p.energy < 100) ultBtn.classList.add('disabled'); else ultBtn.classList.remove('disabled');
+    }
+
+    combatAction(type) {
+        const p = this.player;
+        const e = this.currentEnemy;
+        let dmg = 0;
+        let breakDmg = 20;
+
+        if(type === 'attack') {
+            dmg = p.atk;
+            p.sp = Math.min(5, p.sp + 1);
+            p.energy = Math.min(100, p.energy + 20);
+            this.logCombat("普攻：恢复战技点");
+        } else if(type === 'skill') {
+            if(p.sp < 1) return;
+            dmg = p.atk * 2.5;
+            breakDmg = 40;
+            p.sp -= 1;
+            p.energy = Math.min(100, p.energy + 30);
+            this.logCombat("战技：造成大量伤害");
+        } else if(type === 'ult') {
+            if(p.energy < 100) return;
+            dmg = p.atk * 5;
+            breakDmg = 60;
+            p.energy = 0;
+            this.logCombat("规则就是用来打破的！");
+            // 震动特效
+            document.body.style.transform = "translate(5px, 5px)";
+            setTimeout(()=>document.body.style.transform = "none", 100);
+        }
+
+        // 弱点机制
+        if(e.shield > 0) {
+            e.shield -= breakDmg;
+            dmg *= 0.8; // 有盾减伤
+            if(e.shield <= 0) {
+                e.shield = 0;
+                dmg += 100; // 击破伤害
+                this.showDmg("WEAKNESS BREAK!", canvas.width/2, 100);
+            }
+        } else {
+            dmg *= 1.5; // 破盾易伤
+        }
+
+        e.hp -= Math.floor(dmg);
+        this.showDmg(Math.floor(dmg), canvas.width/2, 200);
+        this.updateCombatUI();
+
+        if(e.hp <= 0) {
+            setTimeout(() => this.endCombat(true), 1000);
+        } else {
+            // 敌人回合
+            setTimeout(() => {
+                const eDmg = 50;
+                p.hp -= eDmg;
+                p.energy = Math.min(100, p.energy + 10); // 受击回能
+                this.logCombat(`受到 ${eDmg} 点伤害`);
+                this.updateCombatUI();
+                if(p.hp <= 0) this.endCombat(false);
+            }, 800);
+        }
+    }
+
+    endCombat(win) {
+        if(win) {
+            this.currentEnemy.alive = false;
+            this.state = 'ROAM';
+            document.getElementById('combat-ui').style.display = 'none';
+            document.getElementById('roam-ui').style.display = 'block';
+            document.getElementById('virtual-controller').style.display = 'flex'; // 恢复手柄
+            this.showDialogue("系统", ["战斗胜利！"]);
+        } else {
+            alert("任务失败...");
+            location.reload();
+        }
+    }
+
+    logCombat(msg) {
+        document.getElementById('combat-msg').innerText = msg;
+    }
+
+    showDmg(text, x, y) {
+        const el = document.createElement('div');
+        el.className = 'dmg-num';
+        el.innerText = text;
+        el.style.left = '50%';
+        el.style.top = '30%';
+        el.style.transform = 'translateX(-50%)';
+        document.getElementById('combat-ui').appendChild(el);
+        setTimeout(() => el.remove(), 800);
+    }
+
+    loop() {
+        this.update();
+        this.draw();
+        requestAnimationFrame(this.loop);
+    }
+}
+
+const game = new Game();
+
+</script>
+</body>
+</html>
