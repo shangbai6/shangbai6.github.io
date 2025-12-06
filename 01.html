@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Undertale x 星穹铁道：模拟宇宙</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Courier New', monospace;
+            image-rendering: pixelated;
+        }
+
+        body {
+            background-color: #0a0a1a;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 10px;
+            background-image:
+                radial-gradient(circle at 20% 30%, rgba(30, 30, 70, 0.5) 0%, transparent 50%),
+                radial-gradient(circle at 80% 70%, rgba(70, 30, 70, 0.5) 0%, transparent 50%);
+        }
+
+        .container {
+            width: 100%;
+            max-width: 500px;
+            border: 3px solid #6a4c93;
+            border-radius: 10px;
+            background-color: #1a1a2e;
+            box-shadow: 0 0 20px rgba(106, 76, 147, 0.5);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(to right, #3a1c71, #6a4c93);
+            padding: 15px;
+            text-align: center;
+            border-bottom: 3px solid #6a4c93;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            text-shadow: 2px 2px 0 #000;
+            letter-spacing: 2px;
+        }
+
+        .game-area {
+            padding: 15px;
+            min-height: 300px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            padding: 10px;
+            background-color: rgba(0, 0, 0, 0.3);
+            border-radius: 5px;
+            border: 1px solid #6a4c93;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #aaa;
+        }
+
+        .stat-value {
+            font-size: 16px;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .hp-bar {
+            width: 100%;
+            height: 10px;
+            background-color: #333;
+            border-radius: 5px;
+            margin-top: 5px;
+            overflow: hidden;
+        }
+
+        .hp-fill {
+            height: 100%;
+            background: linear-gradient(to right, #ff0000, #ff7700);
+            border-radius: 5px;
+            transition: width 0.3s;
+        }
+
+        .screen {
+            background-color: #000;
+            border: 2px solid #6a4c93;
+            border-radius: 5px;
+            padding: 15px;
+            min-height: 200px;
+            margin-bottom: 15px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .screen-content {
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .character {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background-color: #fff;
+            border-radius: 50%;
+            bottom: 10px;
+            left: 10px;
+            transition: all 0.2s;
+        }
+
+        .heart {
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background-color: #ff0000;
+            clip-path: polygon(50% 0%, 100% 35%, 82% 100%, 50% 70%, 18% 100%, 0% 35%);
+            transition: all 0.2s;
+        }
+
+        .options {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .option {
+            background-color: #2d2d4d;
+            border: 2px solid #6a4c93;
+            border-radius: 5px;
+            padding: 10px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 16px;
+        }
+
+        .option:hover, .option.active {
+            background-color: #6a4c93;
+            transform: translateY(-2px);
+        }
+
+        .virtual-keyboard {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .key {
+            background-color: #2d2d4d;
+            border: 2px solid #6a4c93;
+            border-radius: 5px;
+            padding: 12px 5px;
+            text-align: center;
+            font-size: 14px;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.1s;
+        }
+
+        .key:active {
+            background-color: #6a4c93;
+            transform: scale(0.95);
+        }
+
+        .blessings, .curios {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: rgba(0, 0, 0, 0.3);
+            border-radius: 5px;
+            border: 1px solid #6a4c93;
+        }
+
+        .blessings h3, .curios h3 {
+            font-size: 14px;
+            margin-bottom: 5px;
+            color: #6a4c93;
+        }
+
+        .items {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        .item {
+            background-color: #2d2d4d;
+            border: 1px solid #6a4c93;
+            border-radius: 3px;
+            padding: 5px;
+            font-size: 12px;
+            max-width: 100px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .positive {
+            border-color: #4CAF50;
+            color: #4CAF50;
+        }
+
+        .negative {
+            border-color: #f44336;
+            color: #f44336;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 10px;
+            font-size: 12px;
+            color: #666;
+            border-top: 1px solid #333;
+        }
+
+        @media (max-width: 500px) {
+            .header h1 {
+                font-size: 20px;
+            }
+           
+            .option {
+                padding: 12px;
+                font-size: 18px;
+            }
+           
+            .key {
+                padding: 15px 5px;
+                font-size: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Undertale x 星穹铁道：模拟宇宙</h1>
+        </div>
+       
+        <div class="game-area">
+            <div class="stats">
+                <div class="stat-item">
+                    <div class="stat-label">HP</div>
+                    <div class="stat-value" id="hp-value">20/20</div>
+                    <div class="hp-bar">
+                        <div class="hp-fill" id="hp-fill" style="width: 100%;"></div>
+                    </div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">ATK</div>
+                    <div class="stat-value" id="atk-value">5</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">GOLD</div>
+                    <div class="stat-value" id="gold-value">10</div>
+                </div>
+            </div>
+           
+            <div class="screen">
+                <div class="screen-content" id="screen-text">
+                    欢迎来到模拟宇宙！选择你的路径：战斗、事件或商店。
+                </div>
+                <div class="character" id="character"></div>
+                <div class="heart" id="heart" style="display: none;"></div>
+            </div>
+           
+            <div class="options">
+                <div class="option active" data-action="battle">战斗</div>
+                <div class="option" data-action="event">事件</div>
+                <div class="option" data-action="shop">商店</div>
+            </div>
+           
+            <div class="virtual-keyboard">
+                <div class="key" data-key="up">↑</div>
+                <div class="key" data-key="z">Z</div>
+                <div class="key" data-key="x">X</div>
+                <div class="key" data-key="left">←</div>
+                <div class="key" data-key="down">↓</div>
+                <div class="key" data-key="right">→</div>
+                <div class="key" data-key="c">C</div>
+                <div class="key" data-key="enter">ENTER</div>
+                <div class="key" data-key="space">SPACE</div>
+            </div>
+           
+            <div class="blessings">
+                <h3>祝福</h3>
+                <div class="items" id="blessings-list">
+                    <!-- 祝福将在这里显示 -->
+                </div>
+            </div>
+           
+            <div class="curios">
+                <h3>奇物</h3>
+                <div class="items" id="curios-list">
+                    <!-- 奇物将在这里显示 -->
+                </div>
+            </div>
+        </div>
+       
+        <div class="footer">
+            结合Undertale与星穹铁道元素的模拟宇宙
+        </div>
+    </div>
+
+    <script>
+        // 游戏状态
+        const gameState = {
+            hp: 20,
+            maxHp: 20,
+            atk: 5,
+            gold: 10,
+            blessings: [],
+            curios: [],
+            currentScreen: 'main',
+            battleEnemyHp: 0,
+            battleEnemyAtk: 3,
+            battleTurn: 0
+        };
+
+        // 祝福列表
+        const blessings = [
+            { name: "存护之祝福", effect: "防御力+2，受到伤害减少1点" },
+            { name: "丰饶之祝福", effect: "每场战斗后恢复3点HP" },
+            { name: "巡猎之祝福", effect: "攻击力+3" },
+            { name: "毁灭之祝福", effect: "攻击力+5，但每场战斗损失2点HP" },
+            { name: "记忆之祝福", effect: "有20%几率闪避敌人攻击" },
+            { name: "欢愉之祝福", effect: "击败敌人后获得额外2金币" },
+            { name: "虚无之祝福", effect: "敌人攻击力-1" }
+        ];
+
+        // 奇物列表
+        const curios = [
+            { name: "星际和平公司的信用卡", effect: "商店商品价格降低30%", type: "positive" },
+            { name: "博士之袍", effect: "每场战斗后恢复1点HP", type: "positive" },
+            { name: "朋克洛德的精神", effect: "可以主动使用，立即结束战斗", type: "positive" },
+            { name: "福灵胶", effect: "下一次事件必定获得正面效果", type: "positive" },
+            { name: "信仰债券", effect: "获得5金币，但失去一个随机祝福", type: "negative" },
+            { name: "分裂金币", effect: "金币数量翻倍，但HP减半", type: "negative" },
+            { name: "虫蛀外衣", effect: "防御力-2", type: "negative" },
+            { name: "无尽黑暗", effect: "所有祝福效果减半", type: "negative" }
+        ];
+
+        // 商店物品
+        const shopItems = [
+            { name: "小治疗药水", cost: 5, effect: "恢复5点HP" },
+            { name: "攻击药水", cost: 8, effect: "本场战斗攻击力+3" },
+            { name: "随机祝福", cost: 15, effect: "获得一个随机祝福" },
+            { name: "随机奇物", cost: 12, effect: "获得一个随机奇物" }
+        ];
+
+        // DOM元素
+        const screenText = document.getElementById('screen-text');
+        const hpValue = document.getElementById('hp-value');
+        const hpFill = document.getElementById('hp-fill');
+        const atkValue = document.getElementById('atk-value');
+        const goldValue = document.getElementById('gold-value');
+        const options = document.querySelectorAll('.option');
+        const keys = document.querySelectorAll('.key');
+        const blessingsList = document.getElementById('blessings-list');
+        const curiosList = document.getElementById('curios-list');
+        const character = document.getElementById('character');
+        const heart = document.getElementById('heart');
+
+        // 初始化游戏
+        function initGame() {
+            updateStats();
+            updateItems();
+           
+            // 添加选项点击事件
+            options.forEach(option => {
+                option.addEventListener('click', () => {
+                    options.forEach(opt => opt.classList.remove('active'));
+                    option.classList.add('active');
+                    handleOptionClick(option.dataset.action);
+                });
+            });
+           
+            // 添加虚拟键盘事件
+            keys.forEach(key => {
+                key.addEventListener('click', () => {
+                    handleKeyPress(key.dataset.key);
+                });
+            });
+           
+            // 添加键盘事件
+            document.addEventListener('keydown', (e) => {
+                const key = e.key.toLowerCase();
+                if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'z', 'x', 'c', 'enter', ' '].includes(key)) {
+                    let mappedKey = key;
+                    if (key === 'arrowup') mappedKey = 'up';
+                    if (key === 'arrowdown') mappedKey = 'down';
+                    if (key === 'arrowleft') mappedKey = 'left';
+                    if (key === 'arrowright') mappedKey = 'right';
+                    if (key === ' ') mappedKey = 'space';
+                   
+                    handleKeyPress(mappedKey);
+                }
+            });
+        }
+
+        // 处理选项点击
+        function handleOptionClick(action) {
+            switch(action) {
+                case 'battle':
+                    startBattle();
+                    break;
+                case 'event':
+                    triggerEvent();
+                    break;
+                case 'shop':
+                    openShop();
+                    break;
+            }
+        }
+
+        // 处理按键
+        function handleKeyPress(key) {
+            if (gameState.currentScreen === 'battle') {
+                handleBattleInput(key);
+            } else if (gameState.currentScreen === 'shop') {
+                handleShopInput(key);
+            }
+        }
+
+        // 开始战斗
+        function startBattle() {
+            gameState.currentScreen = 'battle';
+            gameState.battleEnemyHp = 15;
+            gameState.battleTurn = 0;
+           
+            character.style.display = 'block';
+            heart.style.display = 'block';
+            heart.style.left = '50px';
+            heart.style.bottom = '50px';
+           
+            screenText.innerHTML = `
+                你遇到了一个敌人！<br>
+                敌人HP: ${gameState.battleEnemyHp}<br>
+                使用方向键移动你的灵魂(红色心形)躲避敌人的攻击！<br>
+                按Z键攻击，X键使用奇物，C键尝试逃跑。
+            `;
+        }
+
+        // 处理战斗输入
+        function handleBattleInput(key) {
+            const heartX = parseInt(heart.style.left) || 50;
+            const heartY = parseInt(heart.style.bottom) || 50;
+           
+            // 移动灵魂
+            if (key === 'up' && heartY < 150) heart.style.bottom = (heartY + 10) + 'px';
+            if (key === 'down' && heartY > 10) heart.style.bottom = (heartY - 10) + 'px';
+            if (key === 'left' && heartX > 10) heart.style.left = (heartX - 10) + 'px';
+            if (key === 'right' && heartX < 150) heart.style.left = (heartX + 10) + 'px';
+           
+            // 攻击
+            if (key === 'z') {
+                const damage = gameState.atk;
+                gameState.battleEnemyHp -= damage;
+               
+                screenText.innerHTML += `<br>你对敌人造成了${damage}点伤害！`;
+               
+                if (gameState.battleEnemyHp <= 0) {
+                    endBattle(true);
+                    return;
+                }
+               
+                // 敌人攻击
+                enemyAttack();
+            }
+           
+            // 使用奇物
+            if (key === 'x') {
+                if (gameState.curios.length > 0) {
+                    screenText.innerHTML += `<br>你使用了奇物！`;
+                    // 这里可以添加奇物效果
+                } else {
+                    screenText.innerHTML += `<br>你没有可用的奇物！`;
+                }
+            }
+           
+            // 尝试逃跑
+            if (key === 'c') {
+                const escapeChance = Math.random();
+                if (escapeChance > 0.5) {
+                    screenText.innerHTML += `<br>你成功逃跑了！`;
+                    endBattle(false);
+                } else {
+                    screenText.innerHTML += `<br>逃跑失败！`;
+                    enemyAttack();
+                }
+            }
+           
+            // 更新战斗信息
+            screenText.innerHTML += `<br><br>敌人HP: ${gameState.battleEnemyHp}`;
+            screenText.scrollTop = screenText.scrollHeight;
+        }
+
+        // 敌人攻击
+        function enemyAttack() {
+            gameState.battleTurn++;
+           
+            // 简单攻击模式
+            const attackPattern = gameState.battleTurn % 3;
+            let attackX, attackY;
+           
+            if (attackPattern === 0) {
+                attackX = 50 + Math.floor(Math.random() * 100);
+                attackY = 50 + Math.floor(Math.random() * 100);
+            } else if (attackPattern === 1) {
+                attackX = 50;
+                attackY = 50;
+            } else {
+                attackX = 100;
+                attackY = 100;
+            }
+           
+            // 检测是否击中
+            const heartX = parseInt(heart.style.left) || 50;
+            const heartY = parseInt(heart.style.bottom) || 50;
+            const distance = Math.sqrt(Math.pow(heartX - attackX, 2) + Math.pow(heartY - attackY, 2));
+           
+            if (distance < 30) {
+                const damage = Math.max(1, gameState.battleEnemyAtk - (gameState.blessings.includes("存护之祝福") ? 1 : 0));
+                gameState.hp -= damage;
+                updateStats();
+                screenText.innerHTML += `<br>敌人击中了你！你受到了${damage}点伤害！`;
+               
+                if (gameState.hp <= 0) {
+                    screenText.innerHTML += `<br>你被击败了！游戏结束。`;
+                    setTimeout(() => {
+                        resetGame();
+                    }, 3000);
+                }
+            } else {
+                screenText.innerHTML += `<br>敌人攻击落空了！`;
+            }
+        }
+
+        // 结束战斗
+        function endBattle(victory) {
+            gameState.currentScreen = 'main';
+            character.style.display = 'none';
+            heart.style.display = 'none';
+           
+            if (victory) {
+                const goldEarned = 5 + (gameState.blessings.includes("欢愉之祝福") ? 2 : 0);
+                gameState.gold += goldEarned;
+               
+                // 恢复HP（如果有丰饶之祝福）
+                if (gameState.blessings.includes("丰饶之祝福")) {
+                    gameState.hp = Math.min(gameState.maxHp, gameState.hp + 3);
+                }
+               
+                // 获得随机祝福
+                const randomBlessing = blessings[Math.floor(Math.random() * blessings.length)];
+                gameState.blessings.push(randomBlessing.name);
+               
+                screenText.innerHTML = `
+                    战斗胜利！<br>
+                    获得了${goldEarned}金币！<br>
+                    获得了祝福：${randomBlessing.name} - ${randomBlessing.effect}
+                `;
+               
+                updateStats();
+                updateItems();
+            } else {
+                screenText.innerHTML = "你逃跑了，没有获得奖励。";
+            }
+        }
+
+        // 触发事件
+        function triggerEvent() {
+            const eventType = Math.random();
+           
+            if (eventType < 0.4) {
+                // 获得奇物
+                const randomCurio = curios[Math.floor(Math.random() * curios.length)];
+                gameState.curios.push(randomCurio.name);
+               
+                screenText.innerHTML = `
+                    你发现了一个神秘的物品！<br>
+                    获得了奇物：${randomCurio.name}<br>
+                    效果：${randomCurio.effect}
+                `;
+               
+                updateItems();
+            } else if (eventType < 0.7) {
+                // 获得祝福
+                const randomBlessing = blessings[Math.floor(Math.random() * blessings.length)];
+                gameState.blessings.push(randomBlessing.name);
+               
+                screenText.innerHTML = `
+                    你遇到了一个神秘的存在！<br>
+                    获得了祝福：${randomBlessing.name}<br>
+                    效果：${randomBlessing.effect}
+                `;
+               
+                updateItems();
+            } else if (eventType < 0.9) {
+                // 获得金币
+                const goldFound = Math.floor(Math.random() * 10) + 5;
+                gameState.gold += goldFound;
+               
+                screenText.innerHTML = `你发现了${goldFound}金币！`;
+               
+                updateStats();
+            } else {
+                // 负面事件
+                const damage = Math.floor(Math.random() * 5) + 1;
+                gameState.hp -= damage;
+               
+                screenText.innerHTML = `你遭遇了陷阱，受到了${damage}点伤害！`;
+               
+                updateStats();
+               
+                if (gameState.hp <= 0) {
+                    screenText.innerHTML += `<br>你被击败了！游戏结束。`;
+                    setTimeout(() => {
+                        resetGame();
+                    }, 3000);
+                }
+            }
+        }
+
+        // 打开商店
+        function openShop() {
+            gameState.currentScreen = 'shop';
+           
+            let shopText = "欢迎来到商店！<br>";
+            shopItems.forEach((item, index) => {
+                shopText += `${index+1}. ${item.name} - ${item.cost}金币 (${item.effect})<br>`;
+            });
+            shopText += "<br>按对应数字键购买，按ESC返回。";
+           
+            screenText.innerHTML = shopText;
+        }
+
+        // 处理商店输入
+        function handleShopInput(key) {
+            if (key === 'enter' || key === 'space') {
+                gameState.currentScreen = 'main';
+                screenText.innerHTML = "你离开了商店。";
+                return;
+            }
+           
+            const itemIndex = parseInt(key) - 1;
+            if (itemIndex >= 0 && itemIndex < shopItems.length) {
+                const item = shopItems[itemIndex];
+               
+                if (gameState.gold >= item.cost) {
+                    gameState.gold -= item.cost;
+                   
+                    // 应用物品效果
+                    if (item.name === "小治疗药水") {
+                        gameState.hp = Math.min(gameState.maxHp, gameState.hp + 5);
+                        screenText.innerHTML = `你购买了${item.name}，恢复了5点HP！`;
+                    } else if (item.name === "攻击药水") {
+                        gameState.atk += 3;
+                        screenText.innerHTML = `你购买了${item.name}，攻击力暂时提升了！`;
+                    } else if (item.name === "随机祝福") {
+                        const randomBlessing = blessings[Math.floor(Math.random() * blessings.length)];
+                        gameState.blessings.push(randomBlessing.name);
+                        screenText.innerHTML = `你购买了${item.name}，获得了祝福：${randomBlessing.name}！`;
+                    } else if (item.name === "随机奇物") {
+                        const randomCurio = curios[Math.floor(Math.random() * curios.length)];
+                        gameState.curios.push(randomCurio.name);
+                        screenText.innerHTML = `你购买了${item.name}，获得了奇物：${randomCurio.name}！`;
+                    }
+                   
+                    updateStats();
+                    updateItems();
+                } else {
+                    screenText.innerHTML = "金币不足，无法购买！";
+                }
+            }
+        }
+
+        // 更新状态显示
+        function updateStats() {
+            hpValue.textContent = `${gameState.hp}/${gameState.maxHp}`;
+            hpFill.style.width = `${(gameState.hp / gameState.maxHp) * 100}%`;
+            atkValue.textContent = gameState.atk;
+            goldValue.textContent = gameState.gold;
+        }
+
+        // 更新物品显示
+        function updateItems() {
+            // 更新祝福
+            blessingsList.innerHTML = '';
+            gameState.blessings.forEach(blessing => {
+                const item = document.createElement('div');
+                item.className = 'item positive';
+                item.textContent = blessing;
+                blessingsList.appendChild(item);
+            });
+           
+            // 更新奇物
+            curiosList.innerHTML = '';
+            gameState.curios.forEach(curio => {
+                const item = document.createElement('div');
+                const curioData = curios.find(c => c.name === curio);
+                item.className = `item ${curioData ? curioData.type : 'positive'}`;
+                item.textContent = curio;
+                curiosList.appendChild(item);
+            });
+        }
+
+        // 重置游戏
+        function resetGame() {
+            gameState.hp = 20;
+            gameState.maxHp = 20;
+            gameState.atk = 5;
+            gameState.gold = 10;
+            gameState.blessings = [];
+            gameState.curios = [];
+            gameState.currentScreen = 'main';
+           
+            updateStats();
+            updateItems();
+           
+            screenText.innerHTML = "游戏已重置。选择你的路径：战斗、事件或商店。";
+        }
+
+        // 初始化游戏
+        initGame();
+    </script>
+</body>
+</html>
