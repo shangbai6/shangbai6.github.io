@@ -70,7 +70,7 @@ button,textarea,input{font:inherit}.app{position:relative;z-index:1;height:100%;
 const MODEL='deepseek-v4-pro';
 const ENDPOINT='https://api.deepseek.com/beta/completions';
 const SEPARATOR='全新的对话      Bing AI:你好，这是Bing。我今天能怎么帮助你？😊';
-const BUBBLE_RULE='如需一次输出多个消息气泡，请在第二个及后续气泡前直接输出“Bing AI：”。';
+const BUBBLE_RULE='';
 const MODES={creative:{temperature:.3,delay:()=>50+Math.random()*150},balanced:{temperature:.5,delay:()=>50},precise:{temperature:.1,delay:()=>50+Math.random()*150}};
 const RESET_RE=/---(?:\s|<br\s*\/?>)*全新的对话\s*$/i;
 const SUGGESTIONS=[['💬 聊天','时尚的下一个趋势是什么，我应该在哪里购物才能找到它？'],['▦ 组织','创建一张桌子，帮助我计划接下来两周的膳食'],['⚖ 比较','预算有限的六口之家的前三名车辆是什么？'],['🪄 创造','为专门测评的新社交媒体平台创建一个口号'],['🏷 店','什么是最受好评的咖啡研磨机？'],['🙂 笑','写一个我的同事会觉得有趣的笑话'],['📝 写','写一个关于鱼和青蛙寻找爱情的原创寓言']];
