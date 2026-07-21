@@ -75,7 +75,7 @@ button,textarea,input{font:inherit}.app{position:relative;z-index:1;height:100%;
 const MODEL='deepseek-v4-pro';
 const ENDPOINT='https://api.deepseek.com/beta/completions';
 const SEPARATOR='全新的对话      Bing AI:你好，这是Bing。我今天能怎么帮助你？😊';
-const BUBBLE_RULE='如需一次输出多个消息气泡，请在第二个及后续气泡前直接输出“Bing AI：”。';
+const BUBBLE_RULE='';
 const MODES={creative:{temperature:.3,chunk:()=>6+Math.floor(Math.random()*4),delay:()=>300+Math.random()*700},balanced:{temperature:.5,chunk:()=>1,delay:()=>50},precise:{temperature:.1,chunk:()=>6+Math.floor(Math.random()*4),delay:()=>300+Math.random()*700}};
 const RESET_RE=/[“"]?-{3,}(?:\s|<br\s*\/?>)*全新的对话[”"]?/i;
 const SUGGESTIONS=[['💬 聊天','时尚的下一个趋势是什么，我应该在哪里购物才能找到它？'],['▦ 组织','创建一张桌子，帮助我计划接下来两周的膳食'],['⚖ 比较','预算有限的六口之家的前三名车辆是什么？'],['🪄 创造','为专门测评的新社交媒体平台创建一个口号'],['🏷 店','什么是最受好评的咖啡研磨机？'],['🙂 笑','写一个我的同事会觉得有趣的笑话'],['📝 写','写一个关于鱼和青蛙寻找爱情的原创寓言']];
@@ -103,7 +103,7 @@ function renderRichContent(root,text){
   if(window.renderMathInElement)renderMathInElement(root,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\[',right:'\\]',display:true},{left:'\\(',right:'\\)',display:false},{left:'$',right:'$',display:false}],throwOnError:false,strict:false,ignoredTags:['script','noscript','style','textarea','pre','code']})
 }
 function loadBrand(){const img=$('#brandImage'),files=['logo.png','logo.webp','logo.jpg','logo.jpeg','brand.png','brand.webp','brand.jpg'];let i=0;const next=()=>{if(i>=files.length)return;img.onload=()=>img.classList.add('loaded');img.onerror=()=>{img.classList.remove('loaded');next()};img.src=files[i++]};next()}
-async function loadPrompt(){try{const r=await fetch('./prompt-a.txt',{cache:'no-store'});if(!r.ok)throw 0;promptText=await r.text()}catch{promptText='你是 Bing AI。请保持友好、有帮助、信息丰富，并延续给定参考对话的语气。'}}
+async function loadPrompt(){try{const r=await fetch('./prompt-a.txt',{cache:'no-store'});if(!r.ok)throw 0;promptText=await r.text()}catch{promptText='你是 Bing AI。'}}
 function setMode(next){mode=next;document.body.dataset.mode=next;localStorage.setItem('sydney-mode',next);document.querySelectorAll('.mode').forEach(b=>b.classList.toggle('active',b.dataset.mode===next));document.querySelector('meta[name="theme-color"]').content=getComputedStyle(document.body).getPropertyValue('--bg').trim()}
 function buildSuggestions(){const box=$('#suggestions');box.innerHTML='';SUGGESTIONS.forEach((s,i)=>{const b=document.createElement('button');b.className='suggestion'+(i>3?' wide':'');b.innerHTML=`<div class="tag">${esc(s[0])}</div><div class="prompt">${esc(s[1])}</div>`;b.onclick=()=>{input.value=s[1];resizeInput();input.focus()};box.appendChild(b)})}
 function actionButtons(m,i){const wrap=document.createElement('div');wrap.className='message-actions';const copy=document.createElement('button');copy.textContent='复制';copy.title='复制';copy.setAttribute('aria-label','复制');copy.onclick=()=>copyText(m.content);wrap.appendChild(copy);if(m.role==='assistant'){const regen=document.createElement('button');regen.textContent='重新生成';regen.title='重新生成';regen.setAttribute('aria-label','重新生成');regen.disabled=generating;regen.onclick=()=>regenerate(i);wrap.appendChild(regen)}const del=document.createElement('button');del.textContent='删除';del.title='删除';del.setAttribute('aria-label','删除');del.disabled=generating;del.onclick=()=>{messages.splice(i,1);render()};wrap.appendChild(del);return wrap}
